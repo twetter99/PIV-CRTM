@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -13,7 +14,7 @@ import {
   SidebarInset,
 } from '@/components/ui/sidebar';
 import Link from 'next/link';
-import { LayoutDashboard, List, DollarSign, FileText, Menu, BarChartBig } from 'lucide-react';
+import { LayoutDashboard, List, Euro, FileText, Menu, BarChartBig } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
@@ -23,7 +24,7 @@ import { useState, useEffect, ReactNode } from 'react';
 const navItems = [
   { href: '/', label: 'Panel Control', icon: LayoutDashboard },
   { href: '/panels', label: 'Paneles', icon: List },
-  { href: '/billing', label: 'Facturación', icon: DollarSign },
+  { href: '/billing', label: 'Facturación', icon: Euro },
   { href: '/import-export', label: 'Importar/Exportar', icon: FileText },
 ];
 
@@ -136,3 +137,4 @@ export default function MainLayout({ children }: { children: ReactNode }) {
     </SidebarProvider>
   );
 }
+

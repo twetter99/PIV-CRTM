@@ -1,7 +1,8 @@
+
 "use client";
 import { useData } from "@/contexts/data-provider";
 import MetricCard from "./metric-card";
-import { AlertTriangle, DollarSign, PowerOff, Power, CalendarClock } from "lucide-react";
+import { AlertTriangle, Euro, PowerOff, Power, CalendarClock } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Link from "next/link";
@@ -72,7 +73,7 @@ export function KeyMetrics() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard title="Paneles Activos" value={activePanels} icon={Power} description="Actualmente instalados y operativos." />
         <MetricCard title="Inactivos/Otros" value={inactivePanels} icon={PowerOff} description="Eliminados, mantenimiento, pendientes." />
-        <MetricCard title="Facturado Este Mes" value={`€${monthlyBilledAmount.toFixed(2)}`} icon={DollarSign} description="Facturación total estimada." />
+        <MetricCard title="Facturado Este Mes" value={`€${monthlyBilledAmount.toFixed(2)}`} icon={Euro} description="Facturación total estimada." />
         <MetricCard title="Necesita Atención" value={warnings.length} icon={AlertTriangle} description="Sin cambio de estado en 3+ meses." />
       </div>
       
@@ -119,3 +120,4 @@ export function KeyMetrics() {
     </>
   );
 }
+
