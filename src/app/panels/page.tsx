@@ -1,3 +1,4 @@
+
 "use client";
 import PageHeader from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
@@ -26,12 +27,15 @@ import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescript
 type SortField = keyof Panel | '';
 type SortDirection = 'asc' | 'desc';
 
+const ALL_MUNICIPALITIES_VALUE = "__ALL_MUNICIPALITIES__";
+const ALL_CLIENTS_VALUE = "__ALL_CLIENTS__";
+
 export default function PanelsPage() {
   const { panels, deletePanel } = useData();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterMunicipality, setFilterMunicipality] = useState('');
-  const [filterClient, setFilterClient] = useState('');
+  const [filterMunicipality, setFilterMunicipality] = useState(''); // Stores "" for all, or actual municipality
+  const [filterClient, setFilterClient] = useState(''); // Stores "" for all, or actual client
   const [sortField, setSortField] = useState<SortField>('codigo_parada');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -49,8 +53,8 @@ export default function PanelsPage() {
     let filtered = panels.filter(panel => 
       (panel.codigo_parada.toLowerCase().includes(searchTerm.toLowerCase()) || 
        panel.address.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (filterMunicipality === '' || panel.municipality === filterMunicipality) &&
-      (filterClient === '' || panel.client === filterClient)
+      (filterMunicipality === '' || panel.municipality === filterMunicipality) && // Logic remains the same
+      (filterClient === '' || panel.client === filterClient) // Logic remains the same
     );
 
     if (sortField) {
@@ -133,17 +137,27 @@ export default function PanelsPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="md:col-span-2"
         />
-        <Select value={filterMunicipality} onValueChange={setFilterMunicipality}>
+        <Select 
+          value={filterMunicipality === '' ? ALL_MUNICIPALITIES_VALUE : filterMunicipality} 
+          onValueChange={(value) => {
+            setFilterMunicipality(value === ALL_MUNICIPALITIES_VALUE ? '' : value);
+          }}
+        >
           <SelectTrigger><SelectValue placeholder="Filtrar por Municipio" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos los Municipios</SelectItem>
+            <SelectItem value={ALL_MUNICIPALITIES_VALUE}>Todos los Municipios</SelectItem>
             {municipalities.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterClient} onValueChange={setFilterClient}>
+        <Select 
+          value={filterClient === '' ? ALL_CLIENTS_VALUE : filterClient}
+          onValueChange={(value) => {
+            setFilterClient(value === ALL_CLIENTS_VALUE ? '' : value);
+          }}
+        >
           <SelectTrigger><SelectValue placeholder="Filtrar por Cliente" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos los Clientes</SelectItem>
+            <SelectItem value={ALL_CLIENTS_VALUE}>Todos los Clientes</SelectItem>
             {clients.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -215,3 +229,5 @@ export default function PanelsPage() {
     </div>
   );
 }
+
+    

@@ -1,3 +1,4 @@
+
 "use client";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -23,7 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const eventFormSchema = z.object({
   date: z.string().min(1, "La fecha es obligatoria").refine(val => !isNaN(Date.parse(val)), { message: "Formato de fecha inválido (AAAA-MM-DD)" }),
-  oldStatus: z.enum(ALL_PANEL_STATUSES).optional(),
+  oldStatus: z.enum(ALL_PANEL_STATUSES).optional().nullable(), // Allow null or undefined
   newStatus: z.enum(ALL_PANEL_STATUSES),
   notes: z.string().optional(),
 });
@@ -45,6 +46,8 @@ const statusTranslations: Record<PanelStatus, string> = {
   unknown: "Desconocido",
 };
 
+const NONE_STATUS_VALUE = "__NONE_STATUS__"; // Special value for "N/A (Inicial)"
+
 export default function EventForm({ event, panelId, onClose }: EventFormProps) {
   const { addPanelEvent, updatePanelEvent } = useData();
   const { toast } = useToast();
@@ -54,7 +57,7 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
     resolver: zodResolver(eventFormSchema),
     defaultValues: {
       date: event?.date ? event.date.split('T')[0] : new Date().toISOString().split('T')[0],
-      oldStatus: event?.oldStatus,
+      oldStatus: event?.oldStatus || undefined, // Keep as undefined if not present
       newStatus: event?.newStatus || 'installed',
       notes: event?.notes || "",
     },
@@ -64,6 +67,7 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
     const eventData: Partial<PanelEvent> = {
       ...data,
       date: data.date,
+      oldStatus: data.oldStatus === null ? undefined : data.oldStatus, // Ensure undefined is passed if "N/A"
     };
 
     try {
@@ -127,14 +131,17 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Estado Anterior</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value === NONE_STATUS_VALUE ? undefined : value as PanelStatus)} 
+                      value={field.value ?? NONE_STATUS_VALUE} // Use special value if field.value is undefined/null
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar estado anterior (opcional)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">N/A (Inicial)</SelectItem>
+                        <SelectItem value={NONE_STATUS_VALUE}>N/A (Inicial)</SelectItem>
                         {ALL_PANEL_STATUSES.map(s => <SelectItem key={s} value={s}>{statusTranslations[s]}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -188,3 +195,5 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
     </Dialog>
   );
 }
+
+    
