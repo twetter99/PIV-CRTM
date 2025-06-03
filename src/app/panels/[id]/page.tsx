@@ -9,10 +9,11 @@ import { Edit2, PlusCircle, Trash2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type { Panel, PanelEvent } from '@/types/piv';
-import PanelForm from '@/components/panels/panel-form'; // Re-use for editing panel
-import EventForm from '@/components/panels/event-form'; // Create this
+import PanelForm from '@/components/panels/panel-form';
+import EventForm from '@/components/panels/event-form';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog,
@@ -28,11 +29,11 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function PanelDetailPage() {
   const params = useParams();
-  const { getPanelById, getEventsForPanel, updatePanelEvent: contextUpdateEvent, deletePanelEvent } = useData(); // deletePanelEvent to be added
+  const { getPanelById, getEventsForPanel, updatePanelEvent: contextUpdateEvent, deletePanelEvent } = useData();
   const { toast } = useToast();
   const panelId = params.id as string;
 
-  const [panel, setPanel] = useState<Panel | null | undefined>(undefined); // undefined for loading
+  const [panel, setPanel] = useState<Panel | null | undefined>(undefined);
   const [events, setEvents] = useState<PanelEvent[]>([]);
   
   const [isPanelFormOpen, setIsPanelFormOpen] = useState(false);
@@ -48,14 +49,13 @@ export default function PanelDetailPage() {
       const currentPanel = getPanelById(panelId);
       setPanel(currentPanel);
       if (currentPanel) {
-        setEvents(getEventsForPanel(panelId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())); // Sort descending by date
+        setEvents(getEventsForPanel(panelId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       }
     }
   }, [panelId, getPanelById, getEventsForPanel]);
 
   const handlePanelFormClose = () => {
     setIsPanelFormOpen(false);
-    // Re-fetch panel data after edit
     if (panelId) setPanel(getPanelById(panelId));
   };
 
@@ -67,7 +67,6 @@ export default function PanelDetailPage() {
   const handleEventFormClose = () => {
     setIsEventFormOpen(false);
     setEditingEvent(null);
-    // Re-fetch events
     if (panelId && panel) setEvents(getEventsForPanel(panelId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   };
 
@@ -77,26 +76,18 @@ export default function PanelDetailPage() {
   };
 
   const handleDeleteEvent = async () => {
-    if (eventToDelete && deletePanelEvent) { // deletePanelEvent to be implemented
-      // const result = await deletePanelEvent(eventToDelete.id);
-      // if (result.success) {
-      //   toast({ title: "Event Deleted", description: `Event on ${eventToDelete.date} has been deleted.` });
-      //   setEvents(prev => prev.filter(e => e.id !== eventToDelete.id));
-      // } else {
-      //   toast({ title: "Error", description: result.message || "Could not delete event.", variant: "destructive" });
-      // }
-       toast({ title: "Delete Mock", description: `Mock deletion for event ${eventToDelete.id}. Implement actual delete.`, variant: "destructive" });
-
+    if (eventToDelete && deletePanelEvent) {
+       toast({ title: "Eliminación simulada", description: `Eliminación simulada para evento ${eventToDelete.id}. Implementar eliminación real.`, variant: "destructive" });
     }
     setShowDeleteConfirm(false);
     setEventToDelete(null);
   };
 
 
-  if (panel === undefined) { // Loading state
+  if (panel === undefined) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Loading Panel..." actions={<Skeleton className="h-10 w-24" />} />
+        <PageHeader title="Cargando Panel..." actions={<Skeleton className="h-10 w-24" />} />
         <Card><CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></Card>
         <Card><CardHeader><Skeleton className="h-8 w-1/3" /></CardHeader><CardContent><Skeleton className="h-64 w-full" /></CardContent></Card>
       </div>
@@ -106,14 +97,26 @@ export default function PanelDetailPage() {
   if (!panel) {
     return (
       <div>
-        <PageHeader title="Panel Not Found" />
-        <p>The panel with ID "{panelId}" could not be found.</p>
+        <PageHeader title="Panel No Encontrado" />
+        <p>El panel con ID "{panelId}" no pudo ser encontrado.</p>
         <Button variant="outline" asChild className="mt-4">
-          <Link href="/panels"><ArrowLeft className="mr-2 h-4 w-4" />Back to Panels</Link>
+          <Link href="/panels"><ArrowLeft className="mr-2 h-4 w-4" />Volver a Paneles</Link>
         </Button>
       </div>
     );
   }
+  
+  const formatStatus = (status: string) => {
+    const statusMap: { [key: string]: string } = {
+        'installed': 'Instalado',
+        'removed': 'Eliminado',
+        'maintenance': 'Mantenimiento',
+        'pending_installation': 'Pendiente Instalación',
+        'pending_removal': 'Pendiente Eliminación',
+        'unknown': 'Desconocido'
+    };
+    return statusMap[status] || status.replace(/_/g, ' ');
+  };
 
   return (
     <div className="space-y-6">
@@ -122,7 +125,7 @@ export default function PanelDetailPage() {
         description={panel.address}
         actions={
           <Button variant="outline" asChild>
-            <Link href="/panels"><ArrowLeft className="mr-2 h-4 w-4" />Back to List</Link>
+            <Link href="/panels"><ArrowLeft className="mr-2 h-4 w-4" />Volver al Listado</Link>
           </Button>
         }
       />
@@ -130,32 +133,32 @@ export default function PanelDetailPage() {
       <Card className="shadow-lg">
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
-            <CardTitle className="font-headline text-2xl">Panel Details</CardTitle>
-            <CardDescription>Municipality: {panel.municipality} | Client: {panel.client}</CardDescription>
+            <CardTitle className="font-headline text-2xl">Detalles del Panel</CardTitle>
+            <CardDescription>Municipio: {panel.municipality} | Cliente: {panel.client}</CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={() => setIsPanelFormOpen(true)}>
-            <Edit2 className="mr-2 h-4 w-4" /> Edit Panel
+            <Edit2 className="mr-2 h-4 w-4" /> Editar Panel
           </Button>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
           <div><strong>ID:</strong> {panel.codigo_parada}</div>
-          <div><strong>Status:</strong> <Badge variant={panel.status === 'installed' ? 'default' : (panel.status === 'removed' ? 'destructive' : 'secondary')}>{panel.status}</Badge></div>
-          <div><strong>Address:</strong> {panel.address}</div>
-          <div><strong>Municipality:</strong> {panel.municipality}</div>
-          <div><strong>Client:</strong> {panel.client}</div>
-          <div><strong>Installation Date:</strong> {panel.installationDate ? format(new Date(panel.installationDate), 'PPP') : 'N/A'}</div>
-          <div><strong>Latitude:</strong> {panel.latitude || 'N/A'}</div>
-          <div><strong>Longitude:</strong> {panel.longitude || 'N/A'}</div>
-          <div className="md:col-span-2"><strong>Notes:</strong> {panel.notes || 'N/A'}</div>
-          <div className="md:col-span-2"><strong>Last Status Update:</strong> {panel.lastStatusUpdate ? format(new Date(panel.lastStatusUpdate), 'PPP p') : 'N/A'}</div>
+          <div><strong>Estado:</strong> <Badge variant={panel.status === 'installed' ? 'default' : (panel.status === 'removed' ? 'destructive' : 'secondary')}>{formatStatus(panel.status)}</Badge></div>
+          <div><strong>Dirección:</strong> {panel.address}</div>
+          <div><strong>Municipio:</strong> {panel.municipality}</div>
+          <div><strong>Cliente:</strong> {panel.client}</div>
+          <div><strong>Fecha Instalación:</strong> {panel.installationDate ? format(new Date(panel.installationDate), 'dd/MM/yyyy', { locale: es }) : 'N/A'}</div>
+          <div><strong>Latitud:</strong> {panel.latitude || 'N/A'}</div>
+          <div><strong>Longitud:</strong> {panel.longitude || 'N/A'}</div>
+          <div className="md:col-span-2"><strong>Notas:</strong> {panel.notes || 'N/A'}</div>
+          <div className="md:col-span-2"><strong>Última Actualización Estado:</strong> {panel.lastStatusUpdate ? format(new Date(panel.lastStatusUpdate), 'dd/MM/yyyy p', { locale: es }) : 'N/A'}</div>
         </CardContent>
       </Card>
 
       <Card className="shadow-lg">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="font-headline text-2xl">Event History</CardTitle>
+          <CardTitle className="font-headline text-2xl">Historial de Eventos</CardTitle>
           <Button variant="outline" size="sm" onClick={() => handleEventFormOpen()}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add Event
+            <PlusCircle className="mr-2 h-4 w-4" /> Añadir Evento
           </Button>
         </CardHeader>
         <CardContent>
@@ -164,25 +167,25 @@ export default function PanelDetailPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Old Status</TableHead>
-                    <TableHead>New Status</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Estado Anterior</TableHead>
+                    <TableHead>Estado Nuevo</TableHead>
+                    <TableHead>Notas</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {events.map((event) => (
                     <TableRow key={event.id}>
-                      <TableCell>{format(new Date(event.date), 'PPP')}</TableCell>
-                      <TableCell><Badge variant="secondary">{event.oldStatus || 'Initial'}</Badge></TableCell>
-                      <TableCell><Badge variant={event.newStatus === 'installed' ? 'default' : (event.newStatus === 'removed' ? 'destructive' : 'secondary')}>{event.newStatus}</Badge></TableCell>
+                      <TableCell>{format(new Date(event.date), 'dd/MM/yyyy', { locale: es })}</TableCell>
+                      <TableCell><Badge variant="secondary">{event.oldStatus ? formatStatus(event.oldStatus) : 'Inicial'}</Badge></TableCell>
+                      <TableCell><Badge variant={event.newStatus === 'installed' ? 'default' : (event.newStatus === 'removed' ? 'destructive' : 'secondary')}>{formatStatus(event.newStatus)}</Badge></TableCell>
                       <TableCell className="max-w-xs truncate">{event.notes || '-'}</TableCell>
                       <TableCell className="text-right space-x-1">
-                        <Button variant="ghost" size="icon" onClick={() => handleEventFormOpen(event)} title="Edit Event">
+                        <Button variant="ghost" size="icon" onClick={() => handleEventFormOpen(event)} title="Editar Evento">
                           <Edit2 className="h-4 w-4" />
                         </Button>
-                         {/* <Button variant="ghost" size="icon" onClick={() => confirmDeleteEvent(event)} title="Delete Event" className="text-destructive hover:text-destructive">
+                         {/* <Button variant="ghost" size="icon" onClick={() => confirmDeleteEvent(event)} title="Eliminar Evento" className="text-destructive hover:text-destructive">
                            <Trash2 className="h-4 w-4" />
                          </Button> */}
                       </TableCell>
@@ -192,7 +195,7 @@ export default function PanelDetailPage() {
               </Table>
             </div>
           ) : (
-            <p className="text-muted-foreground text-center py-4">No events recorded for this panel.</p>
+            <p className="text-muted-foreground text-center py-4">No hay eventos registrados para este panel.</p>
           )}
         </CardContent>
       </Card>
@@ -203,15 +206,15 @@ export default function PanelDetailPage() {
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the event for panel
-              "{eventToDelete?.panelId}" on {eventToDelete?.date}.
+              Esta acción no se puede deshacer. Esto eliminará permanentemente el evento para el panel
+              "{eventToDelete?.panelId}" del {eventToDelete?.date ? format(new Date(eventToDelete.date), 'dd/MM/yyyy', { locale: es }) : ''}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowDeleteConfirm(false)}>Cancel</AlertDialogCancel>
-            <Button variant="destructive" onClick={handleDeleteEvent}>Delete Event</Button>
+            <AlertDialogCancel onClick={() => setShowDeleteConfirm(false)}>Cancelar</AlertDialogCancel>
+            <Button variant="destructive" onClick={handleDeleteEvent}>Eliminar Evento</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

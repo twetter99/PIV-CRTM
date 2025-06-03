@@ -22,7 +22,7 @@ import { ALL_PANEL_STATUSES } from "@/types/piv";
 import { useToast } from "@/hooks/use-toast";
 
 const eventFormSchema = z.object({
-  date: z.string().min(1, "Date is required").refine(val => !isNaN(Date.parse(val)), { message: "Invalid date format (YYYY-MM-DD)" }),
+  date: z.string().min(1, "La fecha es obligatoria").refine(val => !isNaN(Date.parse(val)), { message: "Formato de fecha inválido (AAAA-MM-DD)" }),
   oldStatus: z.enum(ALL_PANEL_STATUSES).optional(),
   newStatus: z.enum(ALL_PANEL_STATUSES),
   notes: z.string().optional(),
@@ -35,6 +35,15 @@ interface EventFormProps {
   panelId: string;
   onClose: () => void;
 }
+
+const statusTranslations: Record<PanelStatus, string> = {
+  installed: "Instalado",
+  removed: "Eliminado",
+  maintenance: "Mantenimiento",
+  pending_installation: "Pendiente Instalación",
+  pending_removal: "Pendiente Eliminación",
+  unknown: "Desconocido",
+};
 
 export default function EventForm({ event, panelId, onClose }: EventFormProps) {
   const { addPanelEvent, updatePanelEvent } = useData();
@@ -52,9 +61,9 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
   });
 
   async function onSubmit(data: EventFormValues) {
-    const eventData: Partial<PanelEvent> = { // Partial because id and panelId are handled separately
+    const eventData: Partial<PanelEvent> = {
       ...data,
-      date: data.date, // Already formatted by input type="date"
+      date: data.date,
     };
 
     try {
@@ -62,27 +71,26 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
       if (isEditing && event) {
         result = await updatePanelEvent(event.id, { ...eventData, panelId });
       } else {
-        // For new event, panelId is required
-        result = await addPanelEvent({ ...eventData, panelId } as PanelEvent); // Cast because id will be added by context
+        result = await addPanelEvent({ ...eventData, panelId } as PanelEvent);
       }
       
       if (result.success) {
         toast({
-          title: isEditing ? "Event Updated" : "Event Added",
-          description: `Event for panel ${panelId} on ${data.date} has been successfully ${isEditing ? 'updated' : 'added'}.`,
+          title: isEditing ? "Evento Actualizado" : "Evento Añadido",
+          description: `El evento para el panel ${panelId} del ${data.date} ha sido ${isEditing ? 'actualizado' : 'añadido'} correctamente.`,
         });
         onClose();
       } else {
          toast({
           title: "Error",
-          description: result.message || (isEditing ? "Could not update event." : "Could not add event."),
+          description: result.message || (isEditing ? "No se pudo actualizar el evento." : "No se pudo añadir el evento."),
           variant: "destructive",
         });
       }
     } catch (error: any) {
         toast({
-          title: "Submission Error",
-          description: error.message || "An unexpected error occurred.",
+          title: "Error de Envío",
+          description: error.message || "Ocurrió un error inesperado.",
           variant: "destructive",
         });
     }
@@ -92,9 +100,9 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Event" : "Add New Event"}</DialogTitle>
+          <DialogTitle>{isEditing ? "Editar Evento" : "Añadir Nuevo Evento"}</DialogTitle>
           <DialogDescription>
-            {isEditing ? `Update event for panel ${panelId}.` : `Record a new status change for panel ${panelId}.`}
+            {isEditing ? `Actualizar evento para el panel ${panelId}.` : `Registrar un nuevo cambio de estado para el panel ${panelId}.`}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -104,7 +112,7 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
               name="date"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Event Date</FormLabel>
+                  <FormLabel>Fecha del Evento</FormLabel>
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>
@@ -118,16 +126,16 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
                 name="oldStatus"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Old Status</FormLabel>
+                    <FormLabel>Estado Anterior</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select old status (optional)" />
+                          <SelectValue placeholder="Seleccionar estado anterior (opcional)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">N/A (Initial)</SelectItem>
-                        {ALL_PANEL_STATUSES.map(s => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
+                        <SelectItem value="">N/A (Inicial)</SelectItem>
+                        {ALL_PANEL_STATUSES.map(s => <SelectItem key={s} value={s}>{statusTranslations[s]}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -139,15 +147,15 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
                 name="newStatus"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>New Status</FormLabel>
+                    <FormLabel>Estado Nuevo</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value} required>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select new status" />
+                          <SelectValue placeholder="Seleccionar estado nuevo" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {ALL_PANEL_STATUSES.map(s => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
+                        {ALL_PANEL_STATUSES.map(s => <SelectItem key={s} value={s}>{statusTranslations[s]}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -160,18 +168,18 @@ export default function EventForm({ event, panelId, onClose }: EventFormProps) {
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Notes</FormLabel>
+                  <FormLabel>Notas</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Reason for status change, details, etc." {...field} />
+                    <Textarea placeholder="Motivo del cambio de estado, detalles, etc." {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
               <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? (isEditing ? "Updating..." : "Adding...") : (isEditing ? "Save Changes" : "Add Event")}
+                {form.formState.isSubmitting ? (isEditing ? "Actualizando..." : "Añadiendo...") : (isEditing ? "Guardar Cambios" : "Añadir Evento")}
               </Button>
             </DialogFooter>
           </form>

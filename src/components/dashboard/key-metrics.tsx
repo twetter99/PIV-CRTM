@@ -6,11 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Link from "next/link";
 import { calculateMonthlyBillingForPanel } from "@/lib/billing-utils";
-import type { Panel } from "@/types/piv";
+import type { Panel, PanelStatus } from "@/types/piv";
 import { useEffect, useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
-// Helper to parse YYYY-MM-DD string to Date object (UTC to avoid timezone issues with date parts)
+
 const parseDate = (dateString: string): Date => {
   const [year, month, day] = dateString.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day));
@@ -39,7 +41,6 @@ export function KeyMetrics() {
     threeMonthsAgo.setUTCMonth(threeMonthsAgo.getUTCMonth() - 3);
     
     return panels.filter(panel => {
-      // Consider panels that are not 'pending_installation' or 'pending_removal' for this warning
       if (panel.status === 'pending_installation' || panel.status === 'pending_removal') {
         return false;
       }
@@ -49,39 +50,50 @@ export function KeyMetrics() {
       if (lastKnownDate) {
         return lastKnownDate < threeMonthsAgo;
       }
-      // If no dates at all, maybe flag it, or not, depending on desired behavior. For now, only flag if we have a date.
       return false; 
     });
   }, [panels]);
+
+  const formatStatusDisplay = (status: PanelStatus) => {
+    const statusMap: { [key in PanelStatus]: string } = {
+        'installed': 'Instalado',
+        'removed': 'Eliminado',
+        'maintenance': 'Mantenimiento',
+        'pending_installation': 'Pendiente Instalación',
+        'pending_removal': 'Pendiente Eliminación',
+        'unknown': 'Desconocido'
+    };
+    return statusMap[status] || status.replace(/_/g, ' ');
+  };
 
 
   return (
     <>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard title="Active Panels" value={activePanels} icon={Power} description="Currently installed & operational." />
-        <MetricCard title="Inactive/Other" value={inactivePanels} icon={PowerOff} description="Removed, maintenance, pending." />
-        <MetricCard title="Billed This Month" value={`$${monthlyBilledAmount.toFixed(2)}`} icon={DollarSign} description="Estimated total billing." />
-        <MetricCard title="Needs Attention" value={warnings.length} icon={AlertTriangle} description="No status change in 3+ months." />
+        <MetricCard title="Paneles Activos" value={activePanels} icon={Power} description="Actualmente instalados y operativos." />
+        <MetricCard title="Inactivos/Otros" value={inactivePanels} icon={PowerOff} description="Eliminados, mantenimiento, pendientes." />
+        <MetricCard title="Facturado Este Mes" value={`€${monthlyBilledAmount.toFixed(2)}`} icon={DollarSign} description="Facturación total estimada." />
+        <MetricCard title="Necesita Atención" value={warnings.length} icon={AlertTriangle} description="Sin cambio de estado en 3+ meses." />
       </div>
       
       {warnings.length > 0 && (
         <Card className="mt-6 shadow-lg rounded-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 font-headline text-destructive">
-              <AlertTriangle/>Warnings
+              <AlertTriangle/>Advertencias
             </CardTitle>
-            <CardDescription>Panels with no status changes in the last 3 months (excluding pending states).</CardDescription>
+            <CardDescription>Paneles sin cambios de estado en los últimos 3 meses (excluyendo estados pendientes).</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Panel ID</TableHead>
-                    <TableHead>Municipality</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right"><CalendarClock className="inline-block mr-1 h-4 w-4" />Last Update</TableHead>
+                    <TableHead>ID Panel</TableHead>
+                    <TableHead>Municipio</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right"><CalendarClock className="inline-block mr-1 h-4 w-4" />Última Act.</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -94,8 +106,8 @@ export function KeyMetrics() {
                       </TableCell>
                       <TableCell>{panel.municipality}</TableCell>
                       <TableCell>{panel.client}</TableCell>
-                      <TableCell><Badge variant={panel.status === 'installed' ? 'default' : 'secondary'}>{panel.status}</Badge></TableCell>
-                      <TableCell className="text-right">{panel.lastStatusUpdate ? new Date(panel.lastStatusUpdate).toLocaleDateString() : 'N/A'}</TableCell>
+                      <TableCell><Badge variant={panel.status === 'installed' ? 'default' : 'secondary'}>{formatStatusDisplay(panel.status)}</Badge></TableCell>
+                      <TableCell className="text-right">{panel.lastStatusUpdate ? format(new Date(panel.lastStatusUpdate), 'dd/MM/yyyy', { locale: es }) : 'N/A'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

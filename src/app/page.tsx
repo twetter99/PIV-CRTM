@@ -6,8 +6,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader 
-        title="Dashboard" 
-        description="Overview of PIV panel metrics and activity." 
+        title="Panel de Control" 
+        description="Resumen de métricas y actividad de los paneles PIV." 
       />
       <KeyMetrics />
     </div>

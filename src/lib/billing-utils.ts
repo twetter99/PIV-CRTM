@@ -1,6 +1,6 @@
-import type { Panel, PanelEvent, BillingRecord, PanelStatus } from "@/types/piv";
+import type { Panel, PanelEvent, PanelStatus as PivPanelStatus } from "@/types/piv"; // Renamed to avoid conflict
 
-const DAILY_RATE = 10; // Example daily rate per panel, move to config/settings later
+const DAILY_RATE = 10; // Tarifa diaria por panel (ejemplo)
 
 // Helper to format date to YYYY-MM-DD
 const formatDate = (date: Date): string => date.toISOString().split('T')[0];
@@ -10,6 +10,15 @@ const parseDate = (dateString: string): Date => {
   return new Date(Date.UTC(year, month - 1, day));
 };
 
+export interface BillingRecord {
+  panelId: string;
+  year: number;
+  month: number; // 1-12
+  billedDays: number;
+  totalDaysInMonth: number;
+  amount: number; // Calculated amount in EUR
+  panelDetails?: Panel;
+}
 
 export function calculateMonthlyBillingForPanel(
   panelId: string,
@@ -30,23 +39,17 @@ export function calculateMonthlyBillingForPanel(
     .sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
 
   let billedDays = 0;
-  let currentStatus: PanelStatus = 'unknown';
+  let currentStatus: PivPanelStatus = 'unknown';
 
-  // Determine status at the beginning of the month
   const monthStartDate = parseDate(`${year}-${String(month).padStart(2, '0')}-01`);
   const eventsBeforeMonth = panelEvents.filter(event => parseDate(event.date) < monthStartDate);
   
   if (eventsBeforeMonth.length > 0) {
     currentStatus = eventsBeforeMonth[eventsBeforeMonth.length - 1].newStatus;
   } else if (panel.installationDate && parseDate(panel.installationDate) < monthStartDate) {
-    // If no events before month, but panel was installed before month.
-    // This assumes the panel.status reflects the status post-installation if no other events.
-    currentStatus = panel.status; // Or more specifically 'installed' if installation implies it.
-                                  // Let's be explicit: if it's installed before month and panel.status is installed.
     if(panel.status === 'installed') currentStatus = 'installed';
   } else if (panel.installationDate && parseDate(panel.installationDate) >= monthStartDate && parseDate(panel.installationDate) < new Date(year, month, 1)) {
-    // Installed within the first day of the month but before any events of the month.
-    currentStatus = 'installed'; // Assume installed on installationDate
+    currentStatus = 'installed';
   }
 
 
@@ -55,10 +58,8 @@ export function calculateMonthlyBillingForPanel(
     const eventsOnThisDay = panelEvents.filter(event => parseDate(event.date).getTime() === currentDate.getTime());
 
     if (eventsOnThisDay.length > 0) {
-      currentStatus = eventsOnThisDay[eventsOnThisDay.length - 1].newStatus; // Status at END of this day
+      currentStatus = eventsOnThisDay[eventsOnThisDay.length - 1].newStatus;
     } else {
-      // If no event on this day, status carries over from previous day.
-      // But we need to check if an event occurred *before* this day but *within* the month.
       const eventsUpToThisDayInMonth = panelEvents.filter(event => {
         const eventDate = parseDate(event.date);
         return eventDate >= monthStartDate && eventDate < currentDate; 
@@ -66,9 +67,8 @@ export function calculateMonthlyBillingForPanel(
       if (eventsUpToThisDayInMonth.length > 0) {
         currentStatus = eventsUpToThisDayInMonth[eventsUpToThisDayInMonth.length - 1].newStatus;
       }
-      // If panel installed on this day, and currentStatus is not set by an event
       if(panel.installationDate && parseDate(panel.installationDate).getTime() === currentDate.getTime() && currentStatus === 'unknown'){
-        currentStatus = 'installed'; // Or panel.initialStatus if such field exists
+        currentStatus = 'installed';
       }
     }
     
@@ -83,7 +83,7 @@ export function calculateMonthlyBillingForPanel(
     month,
     billedDays,
     totalDaysInMonth: daysInMonth,
-    amount: billedDays * DAILY_RATE,
+    amount: billedDays * DAILY_RATE, // Amount is now in EUR
     panelDetails: panel,
   };
 }
@@ -91,7 +91,7 @@ export function calculateMonthlyBillingForPanel(
 
 export interface DayStatus {
   date: string; // YYYY-MM-DD
-  status: PanelStatus;
+  status: PivPanelStatus;
   isBillable: boolean;
   eventNotes?: string;
 }
@@ -112,9 +112,8 @@ export function getPanelHistoryForBillingMonth(
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const dailyHistory: DayStatus[] = [];
-  let currentStatus: PanelStatus = 'unknown';
+  let currentStatus: PivPanelStatus = 'unknown';
 
-  // Determine status at the beginning of the month
   const monthStartDate = parseDate(`${year}-${String(month).padStart(2, '0')}-01`);
   const eventsBeforeMonth = panelEvents.filter(event => parseDate(event.date) < monthStartDate);
   
@@ -126,6 +125,14 @@ export function getPanelHistoryForBillingMonth(
     currentStatus = 'installed';
   }
 
+  const statusTranslations: Record<PivPanelStatus, string> = {
+    installed: "Instalado",
+    removed: "Eliminado",
+    maintenance: "Mantenimiento",
+    pending_installation: "Pendiente Instalación",
+    pending_removal: "Pendiente Eliminación",
+    unknown: "Desconocido",
+  };
 
   for (let day = 1; day <= daysInMonth; day++) {
     const currentDate = parseDate(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
@@ -136,9 +143,8 @@ export function getPanelHistoryForBillingMonth(
 
     if (eventsOnThisDay.length > 0) {
       currentStatus = eventsOnThisDay[eventsOnThisDay.length - 1].newStatus;
-      eventNotesForDay = eventsOnThisDay.map(e => e.notes || `${e.oldStatus || 'initial'} -> ${e.newStatus}`).join('; ');
+      eventNotesForDay = eventsOnThisDay.map(e => e.notes || `${statusTranslations[e.oldStatus || 'unknown'] || 'inicial'} -> ${statusTranslations[e.newStatus]}`).join('; ');
     } else {
-      // Status carries over, check if any event occurred before this day in month
       const eventsUpToThisDayInMonth = panelEvents.filter(event => {
         const eventDate = parseDate(event.date);
         return eventDate >= monthStartDate && eventDate < currentDate;
@@ -148,7 +154,7 @@ export function getPanelHistoryForBillingMonth(
       }
       if(panel.installationDate && parseDate(panel.installationDate).getTime() === currentDate.getTime() && currentStatus === 'unknown'){
         currentStatus = 'installed';
-        eventNotesForDay = "Panel Installed";
+        eventNotesForDay = "Panel Instalado";
       }
     }
     
@@ -156,7 +162,7 @@ export function getPanelHistoryForBillingMonth(
       date: currentDateStr,
       status: currentStatus,
       isBillable: currentStatus === 'installed',
-      eventNotes: eventNotesForDay || (currentStatus !== 'unknown' ? `Status: ${currentStatus}` : 'No specific event'),
+      eventNotes: eventNotesForDay || (currentStatus !== 'unknown' ? `Estado: ${statusTranslations[currentStatus]}` : 'Sin evento específico'),
     });
   }
   return dailyHistory;

@@ -15,6 +15,8 @@ interface DataContextType {
   updatePanelEvent: (eventId: string, updates: Partial<PanelEvent>) => Promise<{ success: boolean; message?: string }>;
   importInitialData: (data: Panel[]) => Promise<{ success: boolean; errors: string[] }>;
   importMonthlyEvents: (data: PanelEvent[]) => Promise<{ success: boolean; errors: string[] }>;
+  deletePanel?: (panelId: string) => Promise<{ success: boolean; message?: string }>; // Optional deletePanel for completeness
+  deletePanelEvent?: (eventId: string) => Promise<{ success: boolean; message?: string }>; // Optional deletePanelEvent
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -38,11 +40,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         )
       );
     } else {
-      // If no events, status might be based on installation date or initial import
-      // For simplicity, if no events, we don't automatically change status here unless it's an initial load.
-      // This part could be enhanced based on specific business rules for panels without events.
-      const panel = MOCK_PANELS.find(p=>p.codigo_parada === panelId); // Check original mock if needed
-      if (panel && panel.installationDate && !panel.lastStatusUpdate) { // Only if it's likely an initial state without events
+      const panel = MOCK_PANELS.find(p=>p.codigo_parada === panelId);
+      if (panel && panel.installationDate && !panel.lastStatusUpdate) {
         setPanels(prevPanels => 
           prevPanels.map(p => 
             p.codigo_parada === panelId 
@@ -70,7 +69,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const addPanel = async (panel: Panel) => {
     if (panels.some(p => p.codigo_parada === panel.codigo_parada)) {
-      return { success: false, message: `Panel with code ${panel.codigo_parada} already exists.` };
+      return { success: false, message: `El panel con código ${panel.codigo_parada} ya existe.` };
     }
     const newPanel = {...panel, lastStatusUpdate: panel.installationDate || new Date().toISOString().split('T')[0]};
     setPanels(prev => [...prev, newPanel]);
@@ -107,9 +106,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setPanelEvents(prev => {
       newEventsList = prev.map(e => {
         if (e.id === eventId) {
-          affectedPanelId = e.panelId; // original panelId
+          affectedPanelId = e.panelId;
           if(updates.panelId && updates.panelId !== e.panelId) {
-             // If panelId is changed, this logic might need to refresh old panelId too. For now, focus on new/current.
              affectedPanelId = updates.panelId;
           }
           return { ...e, ...updates };
@@ -129,7 +127,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const newPanels: Panel[] = [];
     data.forEach(panel => {
       if (panels.some(p => p.codigo_parada === panel.codigo_parada)) {
-        errors.push(`Duplicate panel ID: ${panel.codigo_parada}`);
+        errors.push(`ID de panel duplicado: ${panel.codigo_parada}`);
       } else {
         newPanels.push({...panel, lastStatusUpdate: panel.installationDate || new Date().toISOString().split('T')[0]});
       }
@@ -141,7 +139,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         currentPanels = [...prev, ...newPanels];
         return currentPanels;
       });
-      // Assuming no events are imported with initial data, status is from panel record
       newPanels.forEach(p => refreshPanelStatus(p.codigo_parada, panelEvents));
       return { success: true, errors: [] };
     }
@@ -163,6 +160,26 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     });
     return { success: true, errors: [] };
   };
+  
+  // Mock delete functions as they were referenced in components
+  const deletePanel = async (panelId: string) => {
+    // setPanels(prev => prev.filter(p => p.codigo_parada !== panelId));
+    // setPanelEvents(prev => prev.filter(e => e.panelId !== panelId));
+    // return { success: true };
+    return { success: false, message: "Función de eliminación no implementada." }; // Placeholder
+  };
+
+  const deletePanelEvent = async (eventId: string) => {
+    // setPanelEvents(prev => prev.filter(e => e.id !== eventId));
+    // After deleting, potentially refresh the status of the affected panel
+    // const event = panelEvents.find(e => e.id === eventId);
+    // if (event) {
+    //   refreshPanelStatus(event.panelId, panelEvents.filter(e => e.id !== eventId));
+    // }
+    // return { success: true };
+    return { success: false, message: "Función de eliminación no implementada." }; // Placeholder
+  };
+
 
   return (
     <DataContext.Provider value={{ 
@@ -175,7 +192,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         addPanelEvent, 
         updatePanelEvent, 
         importInitialData, 
-        importMonthlyEvents 
+        importMonthlyEvents,
+        deletePanel,
+        deletePanelEvent
     }}>
       {children}
     </DataContext.Provider>
@@ -185,7 +204,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 export const useData = () => {
   const context = useContext(DataContext);
   if (context === undefined) {
-    throw new Error('useData must be used within a DataProvider');
+    throw new Error('useData debe ser usado dentro de un DataProvider');
   }
   return context;
 };

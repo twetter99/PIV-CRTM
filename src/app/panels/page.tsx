@@ -18,15 +18,16 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import PanelForm from '@/components/panels/panel-form'; // Create this
+import PanelForm from '@/components/panels/panel-form';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 type SortField = keyof Panel | '';
 type SortDirection = 'asc' | 'desc';
 
 export default function PanelsPage() {
-  const { panels, deletePanel } = useData(); // Assuming deletePanel will be added to context
+  const { panels, deletePanel } = useData();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMunicipality, setFilterMunicipality] = useState('');
@@ -64,7 +65,7 @@ export default function PanelsPage() {
           comparison = valA.localeCompare(valB);
         } else if (typeof valA === 'number' && typeof valB === 'number') {
           comparison = valA - valB;
-        } else { // Fallback for mixed types or other types
+        } else { 
           comparison = String(valA).localeCompare(String(valB));
         }
         return sortDirection === 'asc' ? comparison : -comparison;
@@ -105,14 +106,8 @@ export default function PanelsPage() {
   };
 
   const handleDelete = async () => {
-    if (panelToDelete && deletePanel) { // deletePanel needs to be implemented in DataContext
-      // const result = await deletePanel(panelToDelete.codigo_parada);
-      // if(result.success) {
-      //   toast({ title: "Panel Deleted", description: `Panel ${panelToDelete.codigo_parada} has been deleted.` });
-      // } else {
-      //   toast({ title: "Error", description: result.message || "Could not delete panel.", variant: "destructive" });
-      // }
-      toast({ title: "Delete Mock", description: `Mock deletion for ${panelToDelete.codigo_parada}. Implement actual delete in context.`, variant: "destructive" });
+    if (panelToDelete && deletePanel) {
+      toast({ title: "Eliminación simulada", description: `Eliminación simulada para ${panelToDelete.codigo_parada}. Implementar eliminación real en contexto.`, variant: "destructive" });
     }
     setShowDeleteConfirm(false);
     setPanelToDelete(null);
@@ -122,33 +117,33 @@ export default function PanelsPage() {
   return (
     <div className="space-y-6">
       <PageHeader 
-        title="PIV Panels" 
-        description="Manage and view all PIV panels."
+        title="Paneles PIV" 
+        description="Gestiona y visualiza todos los paneles PIV."
         actions={
           <Button onClick={() => handleOpenForm()}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add Panel
+            <PlusCircle className="mr-2 h-4 w-4" /> Añadir Panel
           </Button>
         }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border rounded-lg shadow-sm bg-card">
         <Input 
-          placeholder="Search by ID or Address..."
+          placeholder="Buscar por ID o Dirección..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="md:col-span-2"
         />
         <Select value={filterMunicipality} onValueChange={setFilterMunicipality}>
-          <SelectTrigger><SelectValue placeholder="Filter by Municipality" /></SelectTrigger>
+          <SelectTrigger><SelectValue placeholder="Filtrar por Municipio" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Municipalities</SelectItem>
+            <SelectItem value="">Todos los Municipios</SelectItem>
             {municipalities.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterClient} onValueChange={setFilterClient}>
-          <SelectTrigger><SelectValue placeholder="Filter by Client" /></SelectTrigger>
+          <SelectTrigger><SelectValue placeholder="Filtrar por Cliente" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Clients</SelectItem>
+            <SelectItem value="">Todos los Clientes</SelectItem>
             {clients.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -159,11 +154,11 @@ export default function PanelsPage() {
           <TableHeader>
             <TableRow>
               <TableHead onClick={() => handleSort('codigo_parada')} className="cursor-pointer">ID <SortIndicator field="codigo_parada" /></TableHead>
-              <TableHead onClick={() => handleSort('municipality')} className="cursor-pointer">Municipality <SortIndicator field="municipality" /></TableHead>
-              <TableHead onClick={() => handleSort('client')} className="cursor-pointer">Client <SortIndicator field="client" /></TableHead>
-              <TableHead>Address</TableHead>
-              <TableHead onClick={() => handleSort('status')} className="cursor-pointer">Status <SortIndicator field="status" /></TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead onClick={() => handleSort('municipality')} className="cursor-pointer">Municipio <SortIndicator field="municipality" /></TableHead>
+              <TableHead onClick={() => handleSort('client')} className="cursor-pointer">Cliente <SortIndicator field="client" /></TableHead>
+              <TableHead>Dirección</TableHead>
+              <TableHead onClick={() => handleSort('status')} className="cursor-pointer">Estado <SortIndicator field="status" /></TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -173,17 +168,17 @@ export default function PanelsPage() {
                 <TableCell>{panel.municipality}</TableCell>
                 <TableCell>{panel.client}</TableCell>
                 <TableCell>{panel.address}</TableCell>
-                <TableCell><Badge variant={panel.status === 'installed' ? 'default' : (panel.status === 'removed' ? 'destructive' : 'secondary') }>{panel.status}</Badge></TableCell>
+                <TableCell><Badge variant={panel.status === 'installed' ? 'default' : (panel.status === 'removed' ? 'destructive' : 'secondary') }>{panel.status.replace(/_/g, ' ')}</Badge></TableCell>
                 <TableCell className="text-right space-x-1">
                   <Button variant="ghost" size="icon" asChild>
-                    <Link href={`/panels/${panel.codigo_parada}`} title="View Details">
+                    <Link href={`/panels/${panel.codigo_parada}`} title="Ver Detalles">
                       <Eye className="h-4 w-4" />
                     </Link>
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleOpenForm(panel)} title="Edit Panel">
+                  <Button variant="ghost" size="icon" onClick={() => handleOpenForm(panel)} title="Editar Panel">
                     <Edit2 className="h-4 w-4" />
                   </Button>
-                  {/* <Button variant="ghost" size="icon" onClick={() => confirmDelete(panel)} title="Delete Panel" className="text-destructive hover:text-destructive">
+                  {/* <Button variant="ghost" size="icon" onClick={() => confirmDelete(panel)} title="Eliminar Panel" className="text-destructive hover:text-destructive">
                     <Trash2 className="h-4 w-4" />
                   </Button> */}
                 </TableCell>
@@ -192,7 +187,7 @@ export default function PanelsPage() {
              {filteredAndSortedPanels.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                  No panels found.
+                  No se encontraron paneles.
                 </TableCell>
               </TableRow>
             )}
@@ -204,15 +199,15 @@ export default function PanelsPage() {
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the panel
-              "{panelToDelete?.codigo_parada}" and all its associated data.
+              Esta acción no se puede deshacer. Esto eliminará permanentemente el panel
+              "{panelToDelete?.codigo_parada}" y todos sus datos asociados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowDeleteConfirm(false)}>Cancel</AlertDialogCancel>
-            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+            <AlertDialogCancel onClick={() => setShowDeleteConfirm(false)}>Cancelar</AlertDialogCancel>
+            <Button variant="destructive" onClick={handleDelete}>Eliminar</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

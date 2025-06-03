@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
-const months = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: new Date(0, i).toLocaleString('default', { month: 'long' }) }));
+const months = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: new Date(0, i).toLocaleString('es-ES', { month: 'long' }) }));
 
 export default function BillingPage() {
   const { panels, panelEvents } = useData();
@@ -24,7 +24,7 @@ export default function BillingPage() {
   const billingData = useMemo(() => {
     return panels.map(panel => 
       calculateMonthlyBillingForPanel(panel.codigo_parada, selectedYear, selectedMonth, panelEvents, panels)
-    ).filter(record => record.billedDays > 0 || record.panelDetails?.status === 'installed'); // Show if billable or currently installed
+    ).filter(record => record.billedDays > 0 || record.panelDetails?.status === 'installed');
   }, [panels, panelEvents, selectedYear, selectedMonth]);
 
   const totalBilledForMonth = useMemo(() => {
@@ -32,19 +32,22 @@ export default function BillingPage() {
   }, [billingData]);
 
   const handleExport = () => {
-    // Placeholder for Excel export functionality
-    alert(`Exporting billing data for ${months.find(m=>m.value === selectedMonth)?.label} ${selectedYear}... (Not implemented)`);
+    alert(`Exportando datos de facturación para ${months.find(m=>m.value === selectedMonth)?.label} ${selectedYear}... (No implementado)`);
     console.log("Export Data:", billingData);
   };
+
+  const currentMonthLabel = months.find(m => m.value === selectedMonth)?.label;
+  const capitalizedMonthLabel = currentMonthLabel ? currentMonthLabel.charAt(0).toUpperCase() + currentMonthLabel.slice(1) : '';
+
 
   return (
     <div className="space-y-6">
       <PageHeader 
-        title="Monthly Billing"
-        description={`View and manage billing for ${months.find(m=>m.value === selectedMonth)?.label} ${selectedYear}.`}
+        title="Facturación Mensual"
+        description={`Ver y gestionar la facturación para ${capitalizedMonthLabel} ${selectedYear}.`}
         actions={
           <Button onClick={handleExport} variant="outline">
-            <Download className="mr-2 h-4 w-4" /> Export to Excel
+            <Download className="mr-2 h-4 w-4" /> Exportar a Excel
           </Button>
         }
       />
@@ -52,20 +55,20 @@ export default function BillingPage() {
       <Card className="shadow-sm">
         <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}>
-            <SelectTrigger><SelectValue placeholder="Select Year" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Seleccionar Año" /></SelectTrigger>
             <SelectContent>
               {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
-            <SelectTrigger><SelectValue placeholder="Select Month" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Seleccionar Mes" /></SelectTrigger>
             <SelectContent>
-              {months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+              {months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label.charAt(0).toUpperCase() + m.label.slice(1)}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="sm:text-right">
-            <p className="text-sm text-muted-foreground">Total Billed:</p>
-            <p className="text-2xl font-bold font-headline">${totalBilledForMonth.toFixed(2)}</p>
+            <p className="text-sm text-muted-foreground">Total Facturado:</p>
+            <p className="text-2xl font-bold font-headline">€{totalBilledForMonth.toFixed(2)}</p>
           </div>
         </CardContent>
       </Card>
@@ -74,12 +77,12 @@ export default function BillingPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Panel ID</TableHead>
-              <TableHead>Client</TableHead>
-              <TableHead>Municipality</TableHead>
-              <TableHead className="text-center">Billed Days</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>ID Panel</TableHead>
+              <TableHead>Cliente</TableHead>
+              <TableHead>Municipio</TableHead>
+              <TableHead className="text-center">Días Facturados</TableHead>
+              <TableHead className="text-right">Importe</TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -89,10 +92,10 @@ export default function BillingPage() {
                 <TableCell>{record.panelDetails?.client || 'N/A'}</TableCell>
                 <TableCell>{record.panelDetails?.municipality || 'N/A'}</TableCell>
                 <TableCell className="text-center">{record.billedDays} / {record.totalDaysInMonth}</TableCell>
-                <TableCell className="text-right font-semibold">${record.amount.toFixed(2)}</TableCell>
+                <TableCell className="text-right font-semibold">€{record.amount.toFixed(2)}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" asChild>
-                    <Link href={`/billing/details?panelId=${record.panelId}&year=${selectedYear}&month=${selectedMonth}`} title="View Billing Details">
+                    <Link href={`/billing/details?panelId=${record.panelId}&year=${selectedYear}&month=${selectedMonth}`} title="Ver Detalles de Facturación">
                       <Eye className="h-4 w-4" />
                     </Link>
                   </Button>
@@ -102,7 +105,7 @@ export default function BillingPage() {
             {billingData.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                  No billing data for the selected period or no active panels.
+                  No hay datos de facturación para el período seleccionado o no hay paneles activos.
                 </TableCell>
               </TableRow>
             )}

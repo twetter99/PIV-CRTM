@@ -22,13 +22,13 @@ import { ALL_PANEL_STATUSES } from "@/types/piv";
 import { useToast } from "@/hooks/use-toast";
 
 const panelFormSchema = z.object({
-  codigo_parada: z.string().min(1, "Panel ID is required"),
-  municipality: z.string().min(1, "Municipality is required"),
-  client: z.string().min(1, "Client is required"),
-  address: z.string().min(1, "Address is required"),
+  codigo_parada: z.string().min(1, "El ID del panel es obligatorio"),
+  municipality: z.string().min(1, "El municipio es obligatorio"),
+  client: z.string().min(1, "El cliente es obligatorio"),
+  address: z.string().min(1, "La dirección es obligatoria"),
   latitude: z.coerce.number().optional(),
   longitude: z.coerce.number().optional(),
-  installationDate: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: "Invalid date format (YYYY-MM-DD)" }),
+  installationDate: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: "Formato de fecha inválido (AAAA-MM-DD)" }),
   status: z.enum(ALL_PANEL_STATUSES),
   notes: z.string().optional(),
 });
@@ -39,6 +39,15 @@ interface PanelFormProps {
   panel: Panel | null;
   onClose: () => void;
 }
+
+const statusTranslations: Record<PanelStatus, string> = {
+  installed: "Instalado",
+  removed: "Eliminado",
+  maintenance: "Mantenimiento",
+  pending_installation: "Pendiente Instalación",
+  pending_removal: "Pendiente Eliminación",
+  unknown: "Desconocido",
+};
 
 export default function PanelForm({ panel, onClose }: PanelFormProps) {
   const { addPanel, updatePanel } = useData();
@@ -54,7 +63,7 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
       address: panel?.address || "",
       latitude: panel?.latitude || undefined,
       longitude: panel?.longitude || undefined,
-      installationDate: panel?.installationDate ? panel.installationDate.split('T')[0] : undefined, // Format for input type="date"
+      installationDate: panel?.installationDate ? panel.installationDate.split('T')[0] : undefined,
       status: panel?.status || 'pending_installation',
       notes: panel?.notes || "",
     },
@@ -63,7 +72,7 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
   async function onSubmit(data: PanelFormValues) {
     const panelData: Panel = {
         ...data,
-        installationDate: data.installationDate || undefined, // Ensure it's undefined if empty for backend
+        installationDate: data.installationDate || undefined,
     };
 
     try {
@@ -76,21 +85,21 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
 
       if (result.success) {
         toast({
-          title: isEditing ? "Panel Updated" : "Panel Added",
-          description: `Panel ${data.codigo_parada} has been successfully ${isEditing ? 'updated' : 'added'}.`,
+          title: isEditing ? "Panel Actualizado" : "Panel Añadido",
+          description: `El panel ${data.codigo_parada} ha sido ${isEditing ? 'actualizado' : 'añadido'} correctamente.`,
         });
         onClose();
       } else {
         toast({
           title: "Error",
-          description: result.message || (isEditing ? "Could not update panel." : "Could not add panel."),
+          description: result.message || (isEditing ? "No se pudo actualizar el panel." : "No se pudo añadir el panel."),
           variant: "destructive",
         });
       }
     } catch (error: any) {
        toast({
-          title: "Submission Error",
-          description: error.message || "An unexpected error occurred.",
+          title: "Error de Envío",
+          description: error.message || "Ocurrió un error inesperado.",
           variant: "destructive",
         });
     }
@@ -100,9 +109,9 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Panel" : "Add New Panel"}</DialogTitle>
+          <DialogTitle>{isEditing ? "Editar Panel" : "Añadir Nuevo Panel"}</DialogTitle>
           <DialogDescription>
-            {isEditing ? `Update details for panel ${panel?.codigo_parada}.` : "Enter the details for the new panel."}
+            {isEditing ? `Actualizar detalles para el panel ${panel?.codigo_parada}.` : "Introduce los detalles para el nuevo panel."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -113,9 +122,9 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
                 name="codigo_parada"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Panel ID (codigo_parada)</FormLabel>
+                    <FormLabel>ID Panel (codigo_parada)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., P001" {...field} disabled={isEditing} />
+                      <Input placeholder="ej., P001" {...field} disabled={isEditing} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -126,15 +135,15 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status</FormLabel>
+                    <FormLabel>Estado</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select panel status" />
+                          <SelectValue placeholder="Seleccionar estado del panel" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {ALL_PANEL_STATUSES.map(s => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
+                        {ALL_PANEL_STATUSES.map(s => <SelectItem key={s} value={s}>{statusTranslations[s]}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -148,9 +157,9 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
                 name="municipality"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Municipality</FormLabel>
+                    <FormLabel>Municipio</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., City A" {...field} />
+                      <Input placeholder="ej., Ciudad A" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -161,9 +170,9 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
                 name="client"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Client</FormLabel>
+                    <FormLabel>Cliente</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Client X" {...field} />
+                      <Input placeholder="ej., Cliente X" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -175,9 +184,9 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
               name="address"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Address</FormLabel>
+                  <FormLabel>Dirección</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., 123 Main St" {...field} />
+                    <Input placeholder="ej., C/ Principal 123" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -189,9 +198,9 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
                 name="latitude"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Latitude</FormLabel>
+                    <FormLabel>Latitud</FormLabel>
                     <FormControl>
-                      <Input type="number" step="any" placeholder="e.g., 34.0522" {...field} />
+                      <Input type="number" step="any" placeholder="ej., 34.0522" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -202,9 +211,9 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
                 name="longitude"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Longitude</FormLabel>
+                    <FormLabel>Longitud</FormLabel>
                     <FormControl>
-                      <Input type="number" step="any" placeholder="e.g., -118.2437" {...field} />
+                      <Input type="number" step="any" placeholder="ej., -118.2437" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -215,11 +224,11 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
                 name="installationDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Installation Date</FormLabel>
+                    <FormLabel>Fecha de Instalación</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
-                    <FormDescription>Optional. Format: YYYY-MM-DD</FormDescription>
+                    <FormDescription>Opcional. Formato: AAAA-MM-DD</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -230,18 +239,18 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Notes</FormLabel>
+                  <FormLabel>Notas</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Any additional notes about the panel" {...field} />
+                    <Textarea placeholder="Cualquier nota adicional sobre el panel" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
               <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? (isEditing ? "Updating..." : "Adding...") : (isEditing ? "Save Changes" : "Add Panel")}
+                {form.formState.isSubmitting ? (isEditing ? "Actualizando..." : "Añadiendo...") : (isEditing ? "Guardar Cambios" : "Añadir Panel")}
               </Button>
             </DialogFooter>
           </form>

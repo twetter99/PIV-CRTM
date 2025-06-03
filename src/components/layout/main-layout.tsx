@@ -17,18 +17,18 @@ import { LayoutDashboard, List, DollarSign, FileText, Menu, BarChartBig } from '
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
-import { useIsMobile } from '@/hooks/use-mobile'; // Assumes this hook is robust
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useState, useEffect, ReactNode } from 'react';
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/panels', label: 'Panels', icon: List },
-  { href: '/billing', label: 'Billing', icon: DollarSign },
-  { href: '/import-export', label: 'Import/Export', icon: FileText },
+  { href: '/', label: 'Panel Control', icon: LayoutDashboard },
+  { href: '/panels', label: 'Paneles', icon: List },
+  { href: '/billing', label: 'Facturación', icon: DollarSign },
+  { href: '/import-export', label: 'Importar/Exportar', icon: FileText },
 ];
 
 interface AppSidebarContentProps {
-  onLinkClick?: () => void; // For closing mobile sheet
+  onLinkClick?: () => void;
 }
 
 function AppSidebarContent({ onLinkClick }: AppSidebarContentProps) {
@@ -38,7 +38,7 @@ function AppSidebarContent({ onLinkClick }: AppSidebarContentProps) {
       <SidebarHeader className="p-4">
         <Link href="/" className="flex items-center gap-2" onClick={onLinkClick}>
           <BarChartBig className="h-8 w-8 text-primary" />
-          <h1 className="text-xl font-bold text-primary font-headline">PIV Manager</h1>
+          <h1 className="text-xl font-bold text-primary font-headline">Gestor PIV</h1>
         </Link>
       </SidebarHeader>
       <SidebarContent className="p-2">
@@ -61,7 +61,6 @@ function AppSidebarContent({ onLinkClick }: AppSidebarContentProps) {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
-        {/* Footer content e.g. version, user */}
       </SidebarFooter>
     </>
   );
@@ -77,7 +76,6 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   }, []);
 
   if (!mounted) {
-    // To prevent hydration mismatch and show a loading state for layout
     return (
       <div className="flex min-h-screen flex-col bg-background">
         <div className="sticky top-0 z-50 flex h-16 items-center border-b bg-card px-4 sm:px-6 animate-pulse">
@@ -101,7 +99,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-card px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2">
             <BarChartBig className="h-7 w-7 text-primary" />
-            <span className="text-lg font-semibold text-primary font-headline">PIV Manager</span>
+            <span className="text-lg font-semibold text-primary font-headline">Gestor PIV</span>
           </Link>
           <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
             <SheetTrigger asChild>
@@ -130,12 +128,6 @@ export default function MainLayout({ children }: { children: ReactNode }) {
           <AppSidebarContent />
         </Sidebar>
         <SidebarInset className="flex flex-col !ml-0 !mt-0 !p-0 !rounded-none !shadow-none">
-          {/* Optional Top Bar within main content area if needed, for now content is full height */}
-          {/* <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-card px-6">
-             <SidebarTrigger className="md:hidden" /> -> This might be redundant if sidebar is always icon-collapsible
-            <div className="flex-1"> Page Title / Breadcrumbs </div>
-             User Menu 
-          </header> */}
           <main className="flex-1 p-6 bg-background overflow-auto">
             {children}
           </main>
