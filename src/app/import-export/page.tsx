@@ -9,25 +9,13 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { ChangeEvent, useState } from 'react';
 import type { Panel, PanelEvent, PanelStatus } from '@/types/piv'; 
-import { ALL_PANEL_STATUSES } from '@/types/piv';
+// ALL_PANEL_STATUSES is not directly used here anymore for initial import, but might be for events
+// import { ALL_PANEL_STATUSES } from '@/types/piv'; 
 import { useData } from '@/contexts/data-provider';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 
-// Mapeo de nombres de columnas de Excel a claves de la interfaz Panel
-const panelHeaderMapping: { [key: string]: keyof Panel | string } = {
-  'codigo_parada': 'codigo_parada',
-  'municipio': 'municipality',
-  'cliente': 'client',
-  'direccion': 'address',
-  'latitud': 'latitude',
-  'longitud': 'longitude',
-  'fecha instalacion': 'installationDate',
-  'estado': 'status',
-  'notas': 'notes',
-};
-
-// Mapeo de nombres de columnas de Excel a claves de la interfaz PanelEvent
+// Mapeo de nombres de columnas de Excel a claves de la interfaz PanelEvent (para eventos mensuales)
 const eventHeaderMapping: { [key: string]: keyof PanelEvent | string } = {
   'panelid': 'panelId',
   'fecha': 'date',
@@ -36,7 +24,8 @@ const eventHeaderMapping: { [key: string]: keyof PanelEvent | string } = {
   'notas evento': 'notes',
 };
 
-// Mapeo de valores de estado de Excel a PanelStatus
+// Mapeo de valores de estado de Excel a PanelStatus (para eventos mensuales)
+// Para la importación inicial, el DataProvider se encarga del mapeo de "Vigencia"
 const statusValueMapping: { [key: string]: PanelStatus } = {
   'instalado': 'installed',
   'eliminado': 'removed',
@@ -61,7 +50,7 @@ export default function ImportExportPage() {
       return;
     }
 
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls') && !file.name.endsWith('.csv')) { // CSV might need different parsing
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
        toast({ title: "Tipo de Archivo Inválido", description: "Por favor, sube un archivo Excel (.xlsx, .xls).", variant: "destructive" });
        return;
     }
@@ -79,31 +68,18 @@ export default function ImportExportPage() {
         const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false }) as any[];
-
+        
         let result;
+
         if (type === 'initial') {
-          const panelsToImport: Partial<Panel>[] = jsonData.map(row => {
-            const panel: Partial<Panel> = {};
-            for (const excelHeader in row) {
-              const normalizedExcelHeader = normalizeHeader(excelHeader);
-              const panelKey = panelHeaderMapping[normalizedExcelHeader] as keyof Panel;
-              if (panelKey) {
-                if (panelKey === 'status') {
-                  panel[panelKey] = statusValueMapping[normalizeHeader(String(row[excelHeader]))] || 'unknown';
-                } else if (panelKey === 'installationDate' && row[excelHeader] instanceof Date) {
-                   panel[panelKey] = format(row[excelHeader] as Date, 'yyyy-MM-dd');
-                } else if ((panelKey === 'latitude' || panelKey === 'longitude') && row[excelHeader] !== undefined && row[excelHeader] !== null) {
-                    panel[panelKey] = parseFloat(String(row[excelHeader]));
-                } else {
-                  panel[panelKey] = row[excelHeader];
-                }
-              }
-            }
-            return panel;
-          });
-          result = await importInitialData(panelsToImport);
-        } else { // monthly
+          // Headers en fila 5 (índice 4), datos desde fila 6 (índice 5)
+          // XLSX.utils.sheet_to_json con range: 4 asume que la fila 5 es la cabecera.
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, range: 4, defval: "" }) as any[];
+          result = await importInitialData(jsonData);
+        } else { // monthly events
+          // Para eventos mensuales, mantenemos la lógica anterior de mapeo flexible de cabeceras,
+          // a menos que se especifique una estructura estricta también para ellos.
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, cellDates: true }) as any[];
           const eventsToImport: Partial<PanelEvent>[] = jsonData.map(row => {
             const panelEvent: Partial<PanelEvent> = {};
              for (const excelHeader in row) {
@@ -127,15 +103,16 @@ export default function ImportExportPage() {
 
         if (result.success) {
           toast({ 
-            title: "Importación Exitosa", 
-            description: `${result.message} Filas procesadas: ${jsonData.length}.`
+            title: "Importación Procesada", 
+            description: `${result.message} Registros procesados: ${type === 'initial' ? result.processedCount : jsonData.length}. Añadidos: ${result.addedCount || 0}. Omitidos: ${result.skippedCount || 0}.`,
+            duration: 9000
           });
         } else {
           toast({ 
             title: "Falló la Importación", 
             description: `${result.message} ${result.errors && result.errors.length > 0 ? `Errores: ${result.errors.join('; ')}` : ''}`, 
             variant: "destructive",
-            duration: result.errors && result.errors.length > 5 ? 15000 : 9000 // Longer duration for many errors
+            duration: (result.errors && result.errors.length > 5 ? 15000 : 9000) 
           });
         }
 
@@ -176,7 +153,7 @@ export default function ImportExportPage() {
             <div>
               <Label htmlFor="initial-data-file" className="text-sm font-medium">Importar Datos Iniciales de Paneles</Label>
               <Input id="initial-data-file" type="file" accept=".xlsx, .xls" className="mt-1" onChange={(e) => handleFileUpload(e, 'initial')} disabled={isImporting} />
-              <p className="text-xs text-muted-foreground mt-1">Configuración única para todos los datos maestros de paneles. Columnas esperadas: codigo_parada, municipio, cliente, direccion, latitud, longitud, fecha instalacion (YYYY-MM-DD), estado, notas.</p>
+              <p className="text-xs text-muted-foreground mt-1">Importa datos de paneles. La fila 5 debe contener las cabeceras y los datos comenzar en la fila 6. Campos clave: 'Código parada', 'Municipio Marquesina', 'Vigencia'.</p>
             </div>
             <hr/>
             <div>
@@ -207,17 +184,18 @@ export default function ImportExportPage() {
       </div>
       <Card className="shadow-lg mt-6">
         <CardHeader>
-            <CardTitle className="font-headline">Notas de Validación de Datos Durante la Importación</CardTitle>
+            <CardTitle className="font-headline">Notas de Validación de Datos Durante la Importación (Datos Iniciales)</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
-            <p><strong>Campos Requeridos:</strong> Paneles (codigo_parada, municipio, cliente, direccion, estado), Eventos (panelid, fecha, estado nuevo).</p>
-            <p><strong>Unicidad:</strong> 'codigo_parada' debe ser único para la importación inicial de paneles. No se sobrescribirán paneles existentes con el mismo ID; se reportarán como errores.</p>
-            <p><strong>Existencia de Panel:</strong> Para eventos, el 'panelid' debe corresponder a un panel existente.</p>
-            <p><strong>Tipos de Dato:</strong> Se intentará convertir fechas (esperadas como fechas de Excel o formato YYYY-MM-DD) y números. Los estados deben coincidir con los valores predefinidos (ej. "Instalado", "Mantenimiento").</p>
-            <p><strong>Prevención de Duplicados de Eventos:</strong> Se omitirán eventos si ya existe uno idéntico (mismo panel, fecha, estado anterior y nuevo).</p>
+            <p><strong>Formato de Archivo:</strong> Cabeceras en Fila 5, datos desde Fila 6.</p>
+            <p><strong>Campos Obligatorios (según cabeceras Excel):</strong> 'Código parada', 'Municipio Marquesina', 'Vigencia'.</p>
+            <p><strong>Validación 'Código parada':</strong> No puede estar vacío. Debe ser único en el archivo y en la base de datos existente (se omitirán duplicados).</p>
+            <p><strong>Validación 'Municipio Marquesina':</strong> Si está vacío, se usará "Sin especificar".</p>
+            <p><strong>Validación 'Vigencia':</strong> Valores esperados: "OK", "En Rev.", "Mantenimiento", "Desinstalado", "Pendiente". Si está vacío o no coincide, se usará "Pendiente" (mapeado a "pending_installation").</p>
+            <p><strong>Fechas:</strong> Se intentará convertir fechas de Excel (números de serie) y cadenas (formato YYYY-MM-DD) al formato YYYY-MM-DD. Fechas inválidas resultarán en campo vacío.</p>
+            <p><strong>Límite:</strong> Máximo 1000 registros por importación.</p>
         </CardContent>
       </Card>
     </div>
   );
 }
-

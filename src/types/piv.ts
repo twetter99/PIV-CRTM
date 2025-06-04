@@ -1,3 +1,4 @@
+
 // src/types/piv.ts
 export interface Panel {
   codigo_parada: string; // ID
@@ -10,7 +11,17 @@ export interface Panel {
   status: PanelStatus;
   notes?: string;
   lastStatusUpdate?: string; // ISO date string YYYY-MM-DD
-  // Add other relevant attributes from Excel
+
+  // New fields from detailed import spec
+  codigo_marquesina?: string;
+  tipo_piv?: string;
+  industrial?: string;
+  funcionamiento?: string;
+  diagnostico?: string;
+  tecnico?: string;
+  fecha_importacion?: string; // ISO date string
+  importado_por?: string; // User ID or name
+  
   [key: string]: any; // For additional dynamic fields
 }
 
@@ -37,3 +48,4 @@ export interface BillingRecord {
   amount: number; // Calculated amount
   panelDetails?: Panel; // Include panel details for display
 }
+
