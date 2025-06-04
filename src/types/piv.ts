@@ -7,10 +7,10 @@ export interface Panel {
   address: string;
   latitude?: number;
   longitude?: number;
-  installationDate?: string; // ISO date string YYYY-MM-DD
+  installationDate?: string | null; // ISO date string YYYY-MM-DD
   status: PanelStatus;
   notes?: string;
-  lastStatusUpdate?: string; // ISO date string YYYY-MM-DD
+  lastStatusUpdate?: string | null; // ISO date string YYYY-MM-DD
 
   // New fields from detailed import spec
   codigo_marquesina?: string;
@@ -22,6 +22,11 @@ export interface Panel {
   fecha_importacion?: string; // ISO date string
   importado_por?: string; // User ID or name
   
+  // FECHAS PIV PARA FACTURACIÓN
+  piv_instalado?: string | null;        // YYYY-MM-DD
+  piv_desinstalado?: string | null;     // YYYY-MM-DD  
+  piv_reinstalado?: string | null;      // YYYY-MM-DD
+
   [key: string]: any; // For additional dynamic fields
 }
 
@@ -48,4 +53,3 @@ export interface BillingRecord {
   amount: number; // Calculated amount
   panelDetails?: Panel; // Include panel details for display
 }
-
