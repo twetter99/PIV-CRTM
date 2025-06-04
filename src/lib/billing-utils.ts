@@ -1,5 +1,7 @@
 
 import type { Panel, PanelEvent, PanelStatus as PivPanelStatus } from "@/types/piv";
+import { format as formatDateFns, parseISO, isValid, getDaysInMonth as getDaysInActualMonth } from 'date-fns'; // Renombrado para evitar conflicto
+import { es } from 'date-fns/locale';
 
 const MAX_MONTHLY_RATE = 37.70; // Importe máximo mensual por PIV
 const DAYS_IN_STANDARD_MONTH = 30; // Base para tarifa DIARIA
@@ -24,8 +26,9 @@ const isValidDateString = (dateStr: any): dateStr is string => {
     if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z)?$/.test(dateStr) && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
         return false;
     }
-    const date = new Date(dateStr);
-    return !isNaN(date.getTime()) && date.toISOString().startsWith(dateStr.substring(0,10));
+    // Check if parsing and re-formatting matches (handles invalid dates like 2023-02-30)
+    const dateObj = parseISO(dateStr.substring(0,10)); // Use parseISO for robustness
+    return isValid(dateObj) && formatDateFns(dateObj, 'yyyy-MM-dd') === dateStr.substring(0,10);
 };
 
 
@@ -78,11 +81,11 @@ export function calculateMonthlyBillingForPanel(
   panelId: string,
   year: number,
   month: number, // 1-12
-  allEvents: PanelEvent[], // No longer primary source for billedDays if PIV dates are used
+  allEvents: PanelEvent[], // Kept for signature compatibility, not primary for billedDays if PIV dates are used
   allPanels: Panel[]
 ): BillingRecord {
   const panel = allPanels.find(p => p.codigo_parada === panelId);
-  const actualDaysInBillingMonth = new Date(year, month, 0).getDate();
+  const actualDaysInBillingMonth = getDaysInActualMonth(new Date(year, month - 1));
 
   if (!panel) {
     return { panelId, year, month, billedDays: 0, totalDaysInMonth: actualDaysInBillingMonth, amount: 0, panelDetails: undefined };
@@ -115,6 +118,7 @@ function calculateProportionalBilling(
 ): number {
   if (daysInstalled <= 0) return 0;
 
+  // Si estuvo instalado todos los días del mes actual, cobrar el importe mensual completo
   if (daysInstalled >= actualDaysInBillingMonth) {
     return parseFloat(baseMonthlyAmount.toFixed(2));
   }
@@ -122,38 +126,42 @@ function calculateProportionalBilling(
   const dailyRate = baseMonthlyAmount / daysForDailyRate;
   const proportionalAmount = daysInstalled * dailyRate;
 
+  // Redondear a 2 decimales
   return parseFloat(proportionalAmount.toFixed(2));
 }
 
 function calculateBillableDaysFromPIVDates(panel: Panel, year: number, month: number): number {
-  const actualDaysInBillingMonth = new Date(year, month, 0).getDate();
+  const actualDaysInBillingMonth = getDaysInActualMonth(new Date(year, month - 1));
+  const monthStartDate = new Date(Date.UTC(year, month - 1, 1));
+  
+  console.log(`[Debug ${panel.codigo_parada}] Calculating for ${year}-${month} (Days in month: ${actualDaysInBillingMonth})`);
+  console.log(`[Debug ${panel.codigo_parada}] Raw Dates: PIV_Inst: ${panel.piv_instalado}, PIV_Desinst: ${panel.piv_desinstalado}, PIV_Reinst: ${panel.piv_reinstalado}, Panel.InstDate: ${panel.installationDate}, Panel.Status: ${panel.status}`);
 
   let effectiveInstallDate: Date | null = null;
 
   if (panel.piv_instalado && isValidDateString(panel.piv_instalado)) {
     effectiveInstallDate = parseDate(panel.piv_instalado);
+    console.log(`[Debug ${panel.codigo_parada}] Using piv_instalado: ${formatDate(effectiveInstallDate)}`);
   } else if (panel.status === 'installed' && panel.installationDate && isValidDateString(panel.installationDate)) {
     effectiveInstallDate = parseDate(panel.installationDate);
-    console.log(`PIV ${panel.codigo_parada}: Usando panel.installationDate (${panel.installationDate}) como fallback para fecha de instalación efectiva para ${year}-${month}.`);
+    console.log(`[Debug ${panel.codigo_parada}] Using panel.installationDate (fallback1): ${formatDate(effectiveInstallDate)}`);
   } else if (panel.status === 'installed') {
-    console.log(`PIV ${panel.codigo_parada}: Estado 'installed' pero sin fecha de instalación válida (piv_instalado o installationDate) para ${year}-${month}. Asumiendo instalación desde inicio de mes si no hay otras fechas PIV que lo contradigan.`);
-    // Si el estado es 'installed' y no tenemos ninguna fecha de instalación explícita,
-    // para este mes, podríamos asumir que estaba instalado desde el principio del mes,
-    // a menos que una fecha de desinstalación o reinstalación lo modifique.
-    // Esto es una suposición; idealmente siempre habría una fecha.
-    effectiveInstallDate = new Date(Date.UTC(year, month - 1, 1)); // Asume inicio del mes si status es 'installed' y no hay mejor fecha
+    effectiveInstallDate = monthStartDate; // Fallback for active panels without explicit install dates
+    console.log(`[Debug ${panel.codigo_parada}] Using monthStartDate (fallback2 - status 'installed' but no valid PIV/Inst date): ${formatDate(effectiveInstallDate)}`);
   }
+
+  if (!effectiveInstallDate) {
+    console.log(`[Debug ${panel.codigo_parada}] No effectiveInstallDate determined. Returning 0 billable days.`);
+    return 0;
+  }
+   console.log(`[Debug ${panel.codigo_parada}] Final effectiveInstallDate: ${formatDate(effectiveInstallDate)}`);
+
 
   const desinstallDateObj = panel.piv_desinstalado && isValidDateString(panel.piv_desinstalado) ? parseDate(panel.piv_desinstalado) : null;
   const reinstallDateObj = panel.piv_reinstalado && isValidDateString(panel.piv_reinstalado) ? parseDate(panel.piv_reinstalado) : null;
 
-  // Si no hay fecha de instalación efectiva después de los fallbacks, no se puede facturar.
-  if (!effectiveInstallDate) {
-      if(panel.status === 'installed') { // Solo loguea si se esperaba facturación
-            console.log(`PIV ${panel.codigo_parada} (${year}-${month}): NO HAY FECHA DE INSTALACIÓN EFECTIVA. Días facturables: 0. Status: ${panel.status}. piv_instalado: ${panel.piv_instalado}, installationDate: ${panel.installationDate}`);
-      }
-    return 0;
-  }
+  if (desinstallDateObj) console.log(`[Debug ${panel.codigo_parada}] Parsed desinstallDateObj: ${formatDate(desinstallDateObj)}`);
+  if (reinstallDateObj) console.log(`[Debug ${panel.codigo_parada}] Parsed reinstallDateObj: ${formatDate(reinstallDateObj)}`);
 
   let billableDays = 0;
 
@@ -161,35 +169,28 @@ function calculateBillableDaysFromPIVDates(panel: Panel, year: number, month: nu
     const currentDate = new Date(Date.UTC(year, month - 1, day));
     let isInstalledOnThisDay = false;
 
+    // Panel is potentially active if currentDate is on or after effectiveInstallDate
     if (currentDate >= effectiveInstallDate) {
-      isInstalledOnThisDay = true; // Potencialmente instalado
+      isInstalledOnThisDay = true; // Assume installed
 
+      // Check for desinstallation
       if (desinstallDateObj && currentDate >= desinstallDateObj) {
-        isInstalledOnThisDay = false; // Desinstalado en o antes de este día
+        isInstalledOnThisDay = false; // It was desinstalled on or before this day
 
+        // Check for reinstallation after desinstallation
         if (reinstallDateObj && currentDate >= reinstallDateObj && reinstallDateObj > desinstallDateObj) {
-          isInstalledOnThisDay = true; // Reinstalado y la reinstalación es válida
+          isInstalledOnThisDay = true; // It was reinstalled on or before this day, and after the desinstallation
         }
       }
     }
-
+    
+    // console.log(`[Debug ${panel.codigo_parada}] Day ${day} (${formatDate(currentDate)}): isInstalledOnThisDay = ${isInstalledOnThisDay}`);
     if (isInstalledOnThisDay) {
       billableDays++;
     }
   }
   
-  // Log detallado para cada panel procesado por esta función
-  const logParts = [
-      `PIV ${panel.codigo_parada} (${year}-${month}):`,
-      `Eff.Inst: ${effectiveInstallDate ? formatDate(effectiveInstallDate) : 'N/A'},`,
-      `Desinst: ${desinstallDateObj ? formatDate(desinstallDateObj) : 'N/A'},`,
-      `Reinst: ${reinstallDateObj ? formatDate(reinstallDateObj) : 'N/A'}.`,
-      `ImporteMensualExcel: ${panel.importe_mensual || 'N/A'}.`,
-      `PanelStatus: ${panel.status}.`,
-      `Días Fact: ${billableDays}/${actualDaysInBillingMonth}.`
-  ];
-  console.log(logParts.join(' '));
-
+  console.log(`[Debug ${panel.codigo_parada}] Total billableDays for ${year}-${month}: ${billableDays}`);
   return billableDays;
 }
 
@@ -201,9 +202,6 @@ export interface DayStatus {
   eventNotes?: string;
 }
 
-// Esta función se usa para la vista de DETALLES, y SÍ debería usar el historial de eventos.
-// Su lógica para determinar el estado inicial y los cambios diarios basados en eventos es diferente
-// a la lógica de calculateBillableDaysFromPIVDates que se enfoca solo en las fechas PIV para facturación.
 export function getPanelHistoryForBillingMonth(
   panelId: string,
   year: number,
@@ -218,43 +216,35 @@ export function getPanelHistoryForBillingMonth(
     .filter(event => event.panelId === panelId)
     .sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime()); // Ascendente
 
-  const daysInMonth = new Date(year, month, 0).getDate();
+  const daysInMonth = getDaysInActualMonth(new Date(year, month - 1));
   const dailyHistory: DayStatus[] = [];
-  let currentStatus: PivPanelStatus = 'unknown'; // Estado inicial por defecto
-
+  let currentStatus: PivPanelStatus = 'unknown'; 
   const monthStartDate = parseDate(`${year}-${String(month).padStart(2, '0')}-01`);
 
-  // Determinar el estado al inicio del mes (basado en eventos o fechas PIV si no hay eventos)
+  // Determine initial status at the beginning of the month
   const eventsBeforeMonth = panelEventsForThisPanel.filter(event => parseDate(event.date) < monthStartDate);
   if (eventsBeforeMonth.length > 0) {
     currentStatus = eventsBeforeMonth[eventsBeforeMonth.length - 1].newStatus;
   } else {
-    // Si no hay eventos ANTES del mes, usar fechas PIV o installationDate para estado inicial
-    let initialInstallDate: Date | null = null;
-    if (panel.piv_instalado && isValidDateString(panel.piv_instalado)) {
-      initialInstallDate = parseDate(panel.piv_instalado);
-    } else if (panel.installationDate && isValidDateString(panel.installationDate)) {
-      initialInstallDate = parseDate(panel.installationDate);
-    }
+    // No PanelEvents before the month, try to derive from PIV dates or panel.installationDate
+    let initialEffectiveDate: Date | null = null;
+    if (panel.piv_instalado && isValidDateString(panel.piv_instalado)) initialEffectiveDate = parseDate(panel.piv_instalado);
+    else if (panel.installationDate && isValidDateString(panel.installationDate)) initialEffectiveDate = parseDate(panel.installationDate);
 
-    if (initialInstallDate && initialInstallDate < monthStartDate) {
-        // Instalado antes del inicio del mes. ¿Fue desinstalado/reinstalado antes del mes?
-        let effectiveStatusAtMonthStart: PivPanelStatus = 'installed';
-        const desinstallDateObj = panel.piv_desinstalado && isValidDateString(panel.piv_desinstalado) ? parseDate(panel.piv_desinstalado) : null;
-        const reinstallDateObj = panel.piv_reinstalado && isValidDateString(panel.piv_reinstalado) ? parseDate(panel.piv_reinstalado) : null;
+    if (initialEffectiveDate && initialEffectiveDate < monthStartDate) {
+      currentStatus = 'installed'; // Base assumption
+      const desinstallDatePiv = panel.piv_desinstalado && isValidDateString(panel.piv_desinstalado) ? parseDate(panel.piv_desinstalado) : null;
+      const reinstallDatePiv = panel.piv_reinstalado && isValidDateString(panel.piv_reinstalado) ? parseDate(panel.piv_reinstalado) : null;
 
-        if(desinstallDateObj && desinstallDateObj < monthStartDate) {
-            effectiveStatusAtMonthStart = 'removed';
-            if(reinstallDateObj && reinstallDateObj > desinstallDateObj && reinstallDateObj < monthStartDate) {
-                effectiveStatusAtMonthStart = 'installed';
-            }
+      if (desinstallDatePiv && desinstallDatePiv < monthStartDate) {
+        currentStatus = 'removed';
+        if (reinstallDatePiv && reinstallDatePiv > desinstallDatePiv && reinstallDatePiv < monthStartDate) {
+          currentStatus = 'installed';
         }
-        currentStatus = effectiveStatusAtMonthStart;
+      }
     } else {
-        // No instalado antes del inicio del mes o sin fecha clara, podría ser 'pending_installation' o 'unknown'
-        // o se instalará durante el mes. La iteración diaria lo capturará.
-        // El panel.status original (de "Vigencia") puede ser un buen punto de partida si no hay eventos.
-        currentStatus = panel.status || 'unknown';
+      // If installation is during or after this month, or no clear date, use panel.status (from Vigencia)
+      currentStatus = panel.status;
     }
   }
 
@@ -273,24 +263,42 @@ export function getPanelHistoryForBillingMonth(
     const currentDateStr = formatDate(currentDate);
     let eventNotesForDay = "";
 
-    // Aplicar eventos del día
+    // Apply PanelEvents for the current day (these override PIV date derived status for this view)
     const eventsOnThisDay = panelEventsForThisPanel.filter(event => formatDate(parseDate(event.date)) === currentDateStr);
     if (eventsOnThisDay.length > 0) {
-      currentStatus = eventsOnThisDay[eventsOnThisDay.length - 1].newStatus; // El último evento del día determina el estado
+      currentStatus = eventsOnThisDay[eventsOnThisDay.length - 1].newStatus; 
       eventNotesForDay = eventsOnThisDay.map(e => e.notes || `${statusTranslations[e.oldStatus || 'unknown'] || 'inicial'} -> ${statusTranslations[e.newStatus]}`).join('; ');
     } else {
-        // Si no hay eventos de 'PanelEvent', verificar si las fechas PIV causan un cambio de estado implícito hoy.
-        // Esto es más para coherencia visual si la vista de detalles quiere reflejar las fechas PIV.
-        // Sin embargo, getPanelHistoryForBillingMonth generalmente se basa en 'PanelEvent'.
-        // Por simplicidad, si no hay PanelEvents en el día, el estado no cambia por fechas PIV aquí.
-        // El cálculo de facturación principal ya usa calculateBillableDaysFromPIVDates.
+      // If no PanelEvents, determine status based on PIV dates for this specific day
+      let statusFromPivDates = panel.status; // Default to overall panel status
+
+      let dayEffectiveInstallDate: Date | null = null;
+      if (panel.piv_instalado && isValidDateString(panel.piv_instalado)) dayEffectiveInstallDate = parseDate(panel.piv_instalado);
+      else if (panel.installationDate && isValidDateString(panel.installationDate)) dayEffectiveInstallDate = parseDate(panel.installationDate);
+      
+      if (dayEffectiveInstallDate && currentDate >= dayEffectiveInstallDate) {
+          statusFromPivDates = 'installed';
+          const desDate = panel.piv_desinstalado && isValidDateString(panel.piv_desinstalado) ? parseDate(panel.piv_desinstalado) : null;
+          const reinDate = panel.piv_reinstalado && isValidDateString(panel.piv_reinstalado) ? parseDate(panel.piv_reinstalado) : null;
+          if (desDate && currentDate >= desDate) {
+              statusFromPivDates = 'removed';
+              if(reinDate && currentDate >= reinDate && reinDate > desDate) {
+                  statusFromPivDates = 'installed';
+              }
+          }
+      } else if (dayEffectiveInstallDate && currentDate < dayEffectiveInstallDate) {
+           // Not yet installed based on PIV/installation date
+           statusFromPivDates = panel.status === 'installed' ? 'pending_installation' : panel.status;
+      }
+      currentStatus = statusFromPivDates;
+      eventNotesForDay = currentStatus !== 'unknown' ? `Estado PIV: ${statusTranslations[currentStatus]}` : 'Sin evento específico';
     }
     
     dailyHistory.push({
       date: currentDateStr,
       status: currentStatus,
       isBillable: currentStatus === 'installed',
-      eventNotes: eventNotesForDay || (currentStatus !== 'unknown' ? `Estado: ${statusTranslations[currentStatus]}` : 'Sin evento específico'),
+      eventNotes: eventNotesForDay,
     });
   }
   return dailyHistory;
