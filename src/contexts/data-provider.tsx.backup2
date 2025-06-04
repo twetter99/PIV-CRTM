@@ -542,9 +542,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             installationDate: installationDate_converted === undefined ? null : installationDate_converted, 
             lastStatusUpdate: installationDate_converted === undefined ? null : installationDate_converted || format(new Date(), 'yyyy-MM-dd'), 
             
-            piv_instalado: piv_instalado_converted || null,
-            piv_desinstalado: piv_desinstalado_converted || null,
-            piv_reinstalado: piv_reinstalado_converted || null,
+            piv_instalado: piv_instalado_converted === undefined ? null : piv_instalado_converted,
+            piv_desinstalado: piv_desinstalado_converted === undefined ? null : piv_desinstalado_converted,
+            piv_reinstalado: piv_reinstalado_converted === undefined ? null : piv_reinstalado_converted,
             
             codigo_marquesina: codigo_marquesina,
             tipo_piv: tipo_piv,
