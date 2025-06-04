@@ -1,3 +1,4 @@
+
 "use client";
 import { useParams } from 'next/navigation';
 import { useData } from '@/contexts/data-provider';
@@ -12,7 +13,7 @@ import type { Panel, PanelEvent } from '@/types/piv';
 import PanelForm from '@/components/panels/panel-form';
 import EventForm from '@/components/panels/event-form';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -49,7 +50,11 @@ export default function PanelDetailPage() {
       const currentPanel = getPanelById(panelId);
       setPanel(currentPanel);
       if (currentPanel) {
-        setEvents(getEventsForPanel(panelId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setEvents(getEventsForPanel(panelId).sort((a,b) => {
+          const dateA = a.date ? parseISO(a.date).getTime() : 0;
+          const dateB = b.date ? parseISO(b.date).getTime() : 0;
+          return dateB - dateA;
+        }));
       }
     }
   }, [panelId, getPanelById, getEventsForPanel]);
@@ -67,7 +72,11 @@ export default function PanelDetailPage() {
   const handleEventFormClose = () => {
     setIsEventFormOpen(false);
     setEditingEvent(null);
-    if (panelId && panel) setEvents(getEventsForPanel(panelId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    if (panelId && panel) setEvents(getEventsForPanel(panelId).sort((a,b) => {
+        const dateA = a.date ? parseISO(a.date).getTime() : 0;
+        const dateB = b.date ? parseISO(b.date).getTime() : 0;
+        return dateB - dateA;
+      }));
   };
 
   const confirmDeleteEvent = (event: PanelEvent) => {
@@ -81,6 +90,18 @@ export default function PanelDetailPage() {
     }
     setShowDeleteConfirm(false);
     setEventToDelete(null);
+  };
+
+  const formatDateSafe = (dateString: string | null | undefined) => {
+    if (!dateString) return 'N/A';
+    try {
+      // Ensure the date string is just the date part if it includes time
+      const dateOnlyString = dateString.split('T')[0];
+      return format(parseISO(dateOnlyString), 'dd/MM/yyyy', { locale: es });
+    } catch (error) {
+      // console.error("Error formatting date:", dateString, error);
+      return 'Fecha Inválida';
+    }
   };
 
 
@@ -146,11 +167,24 @@ export default function PanelDetailPage() {
           <div><strong>Dirección:</strong> {panel.address}</div>
           <div><strong>Municipio:</strong> {panel.municipality}</div>
           <div><strong>Cliente:</strong> {panel.client}</div>
-          <div><strong>Fecha Instalación:</strong> {panel.installationDate ? format(new Date(panel.installationDate), 'dd/MM/yyyy', { locale: es }) : 'N/A'}</div>
+          <div><strong>Última Instalación/Reinstalación (General):</strong> {formatDateSafe(panel.installationDate)}</div>
+          <div><strong>PIV Instalado:</strong> {formatDateSafe(panel.piv_instalado)}</div>
+          <div><strong>PIV Desinstalado:</strong> {formatDateSafe(panel.piv_desinstalado)}</div>
+          <div><strong>PIV Reinstalado:</strong> {formatDateSafe(panel.piv_reinstalado)}</div>
+          <div><strong>Importe Mensual (Excel):</strong> {panel.importe_mensual_original || 'N/A'}</div>
           <div><strong>Latitud:</strong> {panel.latitude || 'N/A'}</div>
           <div><strong>Longitud:</strong> {panel.longitude || 'N/A'}</div>
           <div className="md:col-span-2"><strong>Notas:</strong> {panel.notes || 'N/A'}</div>
-          <div className="md:col-span-2"><strong>Última Actualización Estado:</strong> {panel.lastStatusUpdate ? format(new Date(panel.lastStatusUpdate), 'dd/MM/yyyy p', { locale: es }) : 'N/A'}</div>
+          <div className="md:col-span-2"><strong>Última Actualización Estado:</strong> {formatDateSafe(panel.lastStatusUpdate)}</div>
+          
+          {/* Campos adicionales del Excel */}
+          <div><strong>Código Marquesina:</strong> {panel.codigo_marquesina || 'N/A'}</div>
+          <div><strong>Tipo PIV:</strong> {panel.tipo_piv || 'N/A'}</div>
+          <div><strong>Industrial:</strong> {panel.industrial || 'N/A'}</div>
+          <div><strong>Funcionamiento:</strong> {panel.funcionamiento || 'N/A'}</div>
+          <div className="md:col-span-2"><strong>Diagnóstico:</strong> {panel.diagnostico || 'N/A'}</div>
+          <div><strong>Técnico:</strong> {panel.tecnico || 'N/A'}</div>
+          <div><strong>Fecha Importación:</strong> {formatDateSafe(panel.fecha_importacion)}</div>
         </CardContent>
       </Card>
 
@@ -177,7 +211,7 @@ export default function PanelDetailPage() {
                 <TableBody>
                   {events.map((event) => (
                     <TableRow key={event.id}>
-                      <TableCell>{format(new Date(event.date), 'dd/MM/yyyy', { locale: es })}</TableCell>
+                      <TableCell>{formatDateSafe(event.date)}</TableCell>
                       <TableCell><Badge variant="secondary">{event.oldStatus ? formatStatus(event.oldStatus) : 'Inicial'}</Badge></TableCell>
                       <TableCell><Badge variant={event.newStatus === 'installed' ? 'default' : (event.newStatus === 'removed' ? 'destructive' : 'secondary')}>{formatStatus(event.newStatus)}</Badge></TableCell>
                       <TableCell className="max-w-xs truncate">{event.notes || '-'}</TableCell>
@@ -209,7 +243,7 @@ export default function PanelDetailPage() {
             <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción no se puede deshacer. Esto eliminará permanentemente el evento para el panel
-              "{eventToDelete?.panelId}" del {eventToDelete?.date ? format(new Date(eventToDelete.date), 'dd/MM/yyyy', { locale: es }) : ''}.
+              "{eventToDelete?.panelId}" del {eventToDelete?.date ? formatDateSafe(eventToDelete.date) : ''}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -222,3 +256,5 @@ export default function PanelDetailPage() {
     </div>
   );
 }
+
+    
