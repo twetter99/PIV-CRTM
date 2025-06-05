@@ -48,56 +48,70 @@ function cleanExcelData(rawData: any[]): any[] {
     })
     .filter(row => row !== null);
   
-  // console.log("Cleaned Excel Data:", cleanedData); // Optional: for debugging
   return cleanedData as any[];
 }
 
-// Helper function to map Excel column names to application-expected names and ensure "Facturacion"
+// Mapa de claves esperadas por DataProvider a posibles cabeceras en Excel
+// Clave: Nombre de campo en DataProvider/Panel interface
+// Valor: Array de posibles nombres de cabecera en el archivo Excel (sensible a mayúsculas/minúsculas después de trim)
+const providerToExcelMap: { [providerKey: string]: string[] } = {
+  'Código parada': ['codigoParada', 'Código parada', 'CODIGOPARADA', 'idPanel', 'panelId'],
+  'PIV Instalado': ['fechaInstalacion', 'Fecha Instalacion', 'PIV Instalado', 'Instalacion', 'Fecha_Instalacion'],
+  'PIV Desinstalado': ['fechaDesinstalacion', 'Fecha Desinstalacion', 'PIV Desinstalado', 'Desinstalacion', 'Fecha_Desinstalacion'],
+  'PIV Reinstalado': ['fechaReinstalacion', 'Fecha Reinstalacion', 'PIV Reinstalado', 'Reinstalacion', 'Fecha_Reinstalacion'],
+  'Importe Mensual': ['importeMensual', 'Importe Mensual', 'Tarifa', 'Facturacion'],
+  'Municipio Marquesina': ['municipioMarquesina', 'Municipio Marquesina', 'Municipio'],
+  'Vigencia': ['vigencia', 'Vigencia', 'Estado Vigencia'],
+  'Tipo PIV': ['tipoPiv', 'Tipo PIV', 'Tipo de PIV'],
+  'Industrial': ['industrial', 'Industrial'],
+  'Empresas concesionarias': ['empresaConcesionaria', 'Empresas concesionarias', 'Empresa Concesionaria', 'Cliente'],
+  'Direccion CCE (Clear Channel)': ['direccionCce', 'Direccion CCE (Clear Channel)', 'Direccion', 'Address'],
+  'Última instalación/reinstalación': ['ultimaInstalacionOReinstalacion', 'Última instalación/reinstalación', 'Ultima Instalacion/Reinstalacion', 'Fecha Ultima Mod'],
+  'Código Marquesina': ['codigoMarquesina', 'Código Marquesina'],
+  'Marquesina': ['marquesina', 'Marquesina'],
+  'Notas': ['notas', 'Notas', 'Observaciones PIV', 'Observaciones'],
+  'CCE': ['cce', 'CCE', 'Cce'],
+};
+
+
 function mapAndEnsureColumns(cleanedData: any[], type: 'initial' | 'monthly'): any[] {
   if (type === 'initial') {
-    // Define the mapping from actual Excel headers (after trimming by cleanExcelData)
-    // to the names your DataProvider and validateColumns expect.
-    const columnMapping: { [key: string]: string } = {
-      'codigoParada': 'Código parada',
-      'municipioMarquesina': 'Municipio Marquesina',
-      'vigencia': 'Vigencia',
-      // Map other relevant columns that DataProvider uses if their names differ
-      'codigoMarquesina': 'Código Marquesina',
-      'fechaInstalacion': 'PIV Instalado', 
-      'fechaDesinstalacion': 'PIV Desinstalado', 
-      'fechaReinstalacion': 'PIV Reinstalado', 
-      'tipoPiv': 'Tipo PIV',
-      'industrial': 'Industrial',
-      'empresaConcesionaria': 'Empresas concesionarias',
-      'direccionCce': 'Direccion CCE (Clear Channel)',
-      'ultimaInstalacionOReinstalacion': 'Última instalación/reinstalación',
-      'importeMensual': 'Importe Mensual', // Asegurar que este mapeo exista si el Excel tiene 'importeMensual'
-      // Añadir aquí cualquier otro campo del Excel y a qué clave interna debe mapear.
-      // Por ejemplo, si el Excel tiene 'Observaciones PIV' y quieres usar 'notas':
-      // 'Observaciones PIV': 'notas',
-    };
-
-    return cleanedData.map(row => {
-      const mappedRow: { [key: string]: any } = {};
-      for (const rawKey in row) {
-        if (Object.prototype.hasOwnProperty.call(row, rawKey)) {
-          // Use the mapped key if available, otherwise keep the original key (trimmed by cleanExcelData)
-          mappedRow[columnMapping[rawKey] || rawKey] = row[rawKey];
+    return cleanedData.map(rowFromExcel => {
+      const mappedRowForProvider: { [key: string]: any } = {};
+      
+      for (const providerKey in providerToExcelMap) {
+        let valueFound = undefined;
+        for (const excelHeaderCandidate of providerToExcelMap[providerKey]) {
+          if (Object.prototype.hasOwnProperty.call(rowFromExcel, excelHeaderCandidate)) {
+            valueFound = rowFromExcel[excelHeaderCandidate];
+            break; 
+          }
         }
+        mappedRowForProvider[providerKey] = valueFound; 
       }
-      // Asegurar que "Facturacion" esté presente si se espera con ese nombre exacto en DataProvider.
-      // Basado en el prompt, el DataProvider espera 'importe_mensual' que se mapea desde 'Importe Mensual' o 'importeMensual'.
-      // La columna 'Facturacion' del Excel original parece haber sido reemplazada por 'importeMensual'
-      if (!Object.prototype.hasOwnProperty.call(mappedRow, 'Facturacion') && !Object.prototype.hasOwnProperty.call(mappedRow, 'Importe Mensual')) {
-        // Si ni 'Facturacion' ni 'Importe Mensual' están (después del mapeo), y DataProvider lo espera como 'Facturacion',
-        // entonces se añadiría aquí. Pero parece que DataProvider espera `importe_mensual` derivado de `Importe Mensual`.
-        // mappedRow['Facturacion'] = null; 
-      }
-      return mappedRow;
+      // Opcional: pasar claves no mapeadas si es necesario (generalmente no para un DataProvider estricto)
+      // for (const originalKeyInRow in rowFromExcel) {
+      //   if (!Object.values(providerToExcelMap).flat().includes(originalKeyInRow) && 
+      //       !Object.keys(mappedRowForProvider).some(pk => providerToExcelMap[pk].includes(originalKeyInRow))) {
+      //      // Solo añadir si no fue ya mapeada bajo una clave de provider
+      //      let isAlreadyMapped = false;
+      //      for(const pk in providerToExcelMap){
+      //        if(providerToExcelMap[pk].includes(originalKeyInRow) && mappedRowForProvider[pk] !== undefined) {
+      //           isAlreadyMapped = true;
+      //           break;
+      //        }
+      //      }
+      //      if(!isAlreadyMapped) {
+      //         mappedRowForProvider[originalKeyInRow] = rowFromExcel[originalKeyInRow];
+      //      }
+      //   }
+      // }
+      return mappedRowForProvider;
     });
   }
   // Para 'monthly' type, si las columnas del Excel de eventos son diferentes a las esperadas por DataProvider
   // (panelId, fecha, tipo, notes), se necesitaría un mapeo similar aquí.
+  // Por ahora, lo dejamos como estaba, asumiendo que las claves de eventos son más directas.
   return cleanedData;
 }
 
@@ -116,18 +130,18 @@ function validateColumns(data: any[], type: 'initial' | 'monthly'): ColumnValida
   let caseSensitiveComparison = true;
 
   if (type === 'initial') {
-    // Estas son las claves DESPUÉS del mapeo por mapAndEnsureColumns,
-    // que el DataProvider espera recibir.
+    // Estas son las claves que DataProvider espera recibir (las claves de providerToExcelMap)
     requiredHeaders = [
         "Código parada", 
         "Municipio Marquesina", 
         "Vigencia", 
-        "PIV Instalado", // Esta es una clave mapeada
-        "Importe Mensual" // Esta es una clave mapeada
+        "PIV Instalado",
+        "Importe Mensual"
+        // Puedes añadir más claves de providerToExcelMap aquí si son estrictamente necesarias
     ]; 
-    caseSensitiveComparison = true;
+    caseSensitiveComparison = true; // Las claves del DataProvider (providerKey) son sensibles a mayúsculas/minúsculas
   } else { // monthly
-    requiredHeaders = ["panelid", "fecha", "estado anterior", "estado nuevo"]; // Ajustar si el mapeo cambia estos para eventos
+    requiredHeaders = ["panelid", "fecha", "estado anterior", "estado nuevo"]; 
     caseSensitiveComparison = false; 
   }
 
@@ -184,7 +198,6 @@ export default function ImportExportPage() {
           return;
         }
 
-        // Usar cellDates: true para que XLSX intente convertir fechas a objetos Date de JS
         const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
         
         if (workbook.SheetNames.length === 0) {
@@ -202,15 +215,14 @@ export default function ImportExportPage() {
           // Headers en fila 5 (índice 4), datos desde fila 6 (índice 5)
           rawJsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, range: 4, defval: null }) as any[];
         } else { // monthly events
-          // Para eventos, asumir cabeceras en primera fila por defecto
           rawJsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: null }) as any[];
         }
 
         const cleanedData = cleanExcelData(rawJsonData);
-        // console.log(`[${type.toUpperCase()} Import] Cleaned Data (after cleanExcelData):`, cleanedData.slice(0,2));
+        // console.log(`[${type.toUpperCase()} Import] Cleaned Data (first 2 rows):`, cleanedData.slice(0,2));
 
         const mappedData = mapAndEnsureColumns(cleanedData, type);
-        // console.log(`[${type.toUpperCase()} Import] Mapped Data (after mapAndEnsureColumns, first 2 rows):`, mappedData.slice(0,2));
+        // console.log(`[${type.toUpperCase()} Import] Mapped Data for DataProvider (first 2 rows):`, mappedData.slice(0,2));
 
 
         if (mappedData.length === 0 && type === 'initial') {
@@ -236,15 +248,15 @@ export default function ImportExportPage() {
         }
         
         const columnValidation = validateColumns(mappedData, type);
-        // console.log(`[${type.toUpperCase()} Import] Column Validation Result:`, columnValidation);
+        // console.log(`[${type.toUpperCase()} Import] Column Validation Result (based on DataProvider keys):`, columnValidation);
 
         if (!columnValidation.valid) {
           const availableColsString = columnValidation.available.length > 0 ? columnValidation.available.join(', ') : 'Ninguna';
           toast({
-            title: "Error de Cabeceras Requeridas",
-            description: `Faltan columnas requeridas post-mapeo: ${columnValidation.missing.join(', ')}. Columnas disponibles (después de mapeo y limpieza): ${availableColsString}. Revisa el archivo Excel y la configuración de mapeo en 'mapAndEnsureColumns'.`,
+            title: "Error de Cabeceras Requeridas por DataProvider",
+            description: `Faltan columnas requeridas para DataProvider: ${columnValidation.missing.join(', ')}. Columnas disponibles (después de mapeo): ${availableColsString}. Verifique que el Excel contenga las cabeceras candidatas definidas en 'providerToExcelMap' y que estas se mapeen a las claves esperadas.`,
             variant: "destructive",
-            duration: 15000 // Longer duration for more complex message
+            duration: 15000 
           });
           setIsImporting(false);
           if (event.target) event.target.value = '';
@@ -257,7 +269,7 @@ export default function ImportExportPage() {
         if (result.success) {
           toast({ 
             title: "Importación Procesada", 
-            description: `${result.message} Registros en archivo (después de limpieza y mapeo): ${mappedData.length}. Añadidos: ${result.addedCount || 0}. Omitidos: ${result.skippedCount || 0}.`,
+            description: `${result.message} Registros en archivo (después de limpieza): ${cleanedData.length}. Filas mapeadas para DataProvider: ${mappedData.length}. Paneles añadidos: ${result.addedCount || 0}. Eventos generados/añadidos: ${result.updatedCount || 0}. Omitidos: ${result.skippedCount || 0}.`,
             duration: 9000
           });
         } else {
@@ -403,8 +415,8 @@ export default function ImportExportPage() {
         <CardContent className="text-sm text-muted-foreground space-y-2">
             <p><strong>Formato de Archivo Excel:</strong> Cabeceras en Fila 5, datos desde Fila 6.</p>
             <p><strong>Lectura de Fechas:</strong> Se usa `cellDates:true` para que Excel intente convertir fechas a objetos `Date` de JavaScript. La aplicación luego las formatea a `YYYY-MM-DD`.</p>
-            <p><strong>Mapeo de Columnas:</strong> Las columnas del Excel (ej. `fechaInstalacion`, `codigoParada`) son mapeadas a nombres internos (ej. `PIV Instalado`, `Código parada`) antes de ser procesadas por `DataProvider`. Consultar `mapAndEnsureColumns` en `import-export/page.tsx` para el mapeo exacto.</p>
-            <p><strong>Columnas Requeridas Post-Mapeo (para validación en `DataProvider`):</strong> `Código parada`, `Municipio Marquesina`, `Vigencia`, `PIV Instalado`, `Importe Mensual`. Si faltan, la importación puede fallar.</p>
+            <p><strong>Mapeo de Columnas:</strong> Las columnas del Excel (ej. `fechaInstalacion`, `codigoParada`) son mapeadas a nombres internos (ej. `PIV Instalado`, `Código parada`) antes de ser procesadas por `DataProvider`. Consultar `mapAndEnsureColumns` y `providerToExcelMap` en `import-export/page.tsx` para el mapeo exacto.</p>
+            <p><strong>Columnas Requeridas por DataProvider (post-mapeo):</strong> `Código parada`, `Municipio Marquesina`, `Vigencia`, `PIV Instalado`, `Importe Mensual`. Si faltan, la importación puede fallar.</p>
             <p><strong>Validación 'Código parada':</strong> No puede estar vacío. Debe ser único.</p>
             <p><strong>Columna 'Importe Mensual' (o mapeada):</strong> Si no existe o es inválida, se usa un valor por defecto (ej. 37.7).</p>
             <p><strong>Fechas PIV:</strong> `PIV Instalado`, `PIV Desinstalado`, `PIV Reinstalado` son cruciales. Si `PIV Instalado` falta o es inválida después del mapeo y conversión, el panel podría no ser facturable. Errores de formato en estas fechas se reportarán.</p>
@@ -432,6 +444,8 @@ export default function ImportExportPage() {
     </div>
   );
 }
+    
+
     
 
     
