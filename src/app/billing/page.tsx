@@ -45,31 +45,29 @@ export default function BillingPage() {
         'ID Panel': record.panelId,
         'Cliente': record.panelDetails?.client || 'N/A',
         'Municipio': record.panelDetails?.municipality || 'N/A',
-        'Días Facturados': record.billedDays,
-        'Total Días Mes': record.totalDaysInMonth,
+        'Días Facturados (Base 30)': record.billedDays,
         'Importe (€)': record.amount.toFixed(2),
         'Estado': record.panelDetails?.status ? record.panelDetails.status.replace(/_/g, ' ') : 'N/A',
         'Dirección': record.panelDetails?.address || 'N/A',
-        'Fecha Instalación': record.panelDetails?.installationDate || 'N/A'
+        'Fecha Instalación PIV': record.panelDetails?.piv_instalado || 'N/A'
       }));
 
       exportData.push({
         'ID Panel': 'TOTAL',
         'Cliente': '',
         'Municipio': '',
-        'Días Facturados': billingData.reduce((sum, r) => sum + r.billedDays, 0),
-        'Total Días Mes': '',
+        'Días Facturados (Base 30)': billingData.reduce((sum, r) => sum + r.billedDays, 0),
         'Importe (€)': totalBilledForMonth.toFixed(2),
         'Estado': '',
         'Dirección': '',
-        'Fecha Instalación': ''
+        'Fecha Instalación PIV': ''
       });
 
       const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
       
       const colWidths = [
-        { wch: 12 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 },
+        { wch: 12 }, { wch: 25 }, { wch: 20 }, { wch: 20 },
         { wch: 12 }, { wch: 20 }, { wch: 30 }, { wch: 15 }
       ];
       ws['!cols'] = colWidths;
@@ -130,7 +128,7 @@ export default function BillingPage() {
               <TableHead>Cliente</TableHead>
               <TableHead>Municipio</TableHead>
               <TableHead>Estado</TableHead>
-              <TableHead className="text-center">Días Fact.</TableHead>
+              <TableHead className="text-center">Días Fact. (Base 30)</TableHead>
               <TableHead className="text-right">Importe</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -142,7 +140,10 @@ export default function BillingPage() {
                 <TableCell>{record.panelDetails?.client || 'N/A'}</TableCell>
                 <TableCell>{record.panelDetails?.municipality || 'N/A'}</TableCell>
                 <TableCell><Badge variant={record.panelDetails?.status === 'installed' ? 'default' : (record.panelDetails?.status === 'removed' ? 'destructive' : 'secondary') }>{record.panelDetails?.status?.replace(/_/g, ' ') || 'N/A'}</Badge></TableCell>
-                <TableCell className="text-center">{record.billedDays} / {record.totalDaysInMonth}</TableCell>
+                <TableCell className="text-center">
+                  {record.billedDays} / 30
+                  <span className="text-xs text-muted-foreground block">(base estándar)</span>
+                </TableCell>
                 <TableCell className="text-right font-semibold">€{record.amount.toFixed(2)}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" asChild>

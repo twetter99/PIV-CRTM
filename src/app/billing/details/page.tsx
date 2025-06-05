@@ -1,3 +1,4 @@
+
 "use client";
 import { useSearchParams } from 'next/navigation';
 import PageHeader from '@/components/shared/page-header';
@@ -98,7 +99,7 @@ function BillingDetailsContent() {
         <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div><strong>ID Panel:</strong> {billingSummary.panelId}</div>
           <div><strong>Dirección:</strong> {billingSummary.panelDetails.address}</div>
-          <div><strong>Días Facturados:</strong> {billingSummary.billedDays} / {billingSummary.totalDaysInMonth}</div>
+          <div><strong>Días Facturados:</strong> {billingSummary.billedDays} días <span className="text-xs text-muted-foreground">(base 30 estándar)</span></div>
           <div className="font-semibold"><strong>Importe:</strong> €{billingSummary.amount.toFixed(2)}</div>
         </CardContent>
       </Card>
@@ -106,7 +107,7 @@ function BillingDetailsContent() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="font-headline text-xl">Registro Diario de Eventos para {capitalizedMonthName} {year}</CardTitle>
-          <CardDescription>Desglose del estado del panel y días facturables.</CardDescription>
+          <CardDescription>Desglose del estado del panel y días facturables. Días naturales en el mes: {billingSummary.totalDaysInMonth}.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
