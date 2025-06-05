@@ -47,16 +47,6 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-const isValidDateString = (dateStr: any): dateStr is string => {
-  if (typeof dateStr !== 'string') return false;
-  if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}\.\d{3}Z)?$/.test(dateStr) && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    // console.warn(`isValidDateString: Invalid format for date string: ${dateStr}`);
-    return false;
-  }
-  const date = parseISO(dateStr);
-  return isValid(date);
-};
-
 const isValidExcelDate = (serial: number): boolean => {
     return typeof serial === 'number' && serial > 0;
 };
@@ -90,15 +80,68 @@ const convertToYYYYMMDD = (dateInput: any): string | undefined => {
         return undefined;
     }
   } else if (typeof dateInput === 'string') {
-    const trimmedDateInput = dateInput.trim();
-    let parsedDate = parseISO(trimmedDateInput);
+    let trimmedDateInput = dateInput.trim();
+    
+    // Extraer solo la parte YYYY-MM-DD si el string es más largo (ej. "YYYY-MM-DD HH:MM:SS")
+    if (trimmedDateInput.length > 10) {
+        trimmedDateInput = trimmedDateInput.substring(0, 10);
+    }
+
+    let parsedDate = parseISO(trimmedDateInput); // parseISO maneja bien "YYYY-MM-DD"
     if (isValid(parsedDate)) {
-      if (/^\d{4}$/.test(trimmedDateInput)) {
+      // Evitar que un año solo como "2024" se interprete como una fecha válida
+      if (/^\d{4}$/.test(trimmedDateInput) && trimmedDateInput.length === 4) {
           // console.warn(`convertToYYYYMMDD: Ambiguous year-only string: ${trimmedDateInput}`);
           return undefined;
       }
-      date = parsedDate;
-    } else {
+      // Verificar que el formato original era YYYY-MM-DD antes de parseISO
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDateInput)) {
+        // Podría ser un formato como DD/MM/YYYY que parseISO no maneja como esperamos sin transformacion
+        // Intentar parsear formatos DD/MM/YYYY o DD-MM-YY
+        const parts = trimmedDateInput.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+        if (parts) {
+            let day, month, year;
+            const part1 = parseInt(parts[1], 10);
+            const part2 = parseInt(parts[2], 10);
+            let part3 = parseInt(parts[3], 10);
+
+            if (parts[3].length === 2) { // YY
+                year = part3 < 70 ? 2000 + part3 : 1900 + part3;
+            } else { // YYYY
+                year = part3;
+            }
+            // Asumir DD/MM/YYYY si no se puede determinar de otra forma, o MM/DD/YYYY
+            // Esta lógica es simple y puede necesitar ajuste para ambigüedad MM/DD vs DD/MM
+            // Por ahora, asumimos que si part1 > 12, es DD/MM. Si no, podría ser MM/DD o DD/MM.
+            // Para simplificar, vamos a preferir DD/MM si es ambiguo.
+            if (part1 > 12) { // Claramente DD/MM/YYYY
+                day = part1; month = part2;
+            } else if (part2 > 12) { // Claramente MM/DD/YYYY
+                month = part1; day = part2;
+            } else { // Ambiguo (ej. 01/02/2023), asumimos DD/MM por defecto en muchos contextos ES
+                day = part1; month = part2;
+            }
+
+
+            if (year && month && day) {
+                parsedDate = new Date(Date.UTC(year, month - 1, day));
+                 if (!isValid(parsedDate) || parsedDate.getUTCFullYear() !== year || parsedDate.getUTCMonth() !== month -1 || parsedDate.getUTCDate() !== day) {
+                    // console.warn(`convertToYYYYMMDD: Date rolled over or invalid after DD/MM/YYYY construction: ${trimmedDateInput}`);
+                    return undefined;
+                }
+                date = parsedDate;
+            } else {
+                 // console.warn(`convertToYYYYMMDD: Could not parse day/month/year from parts: ${trimmedDateInput}`);
+                return undefined;
+            }
+        } else {
+             // console.warn(`convertToYYYYMMDD: String is not YYYY-MM-DD and not DD/MM/YYYY: ${trimmedDateInput}`);
+            return undefined; // No es YYYY-MM-DD y no se pudo parsear como DD/MM/YYYY
+        }
+      } else {
+        date = parsedDate; // Era YYYY-MM-DD
+      }
+    } else { // parseISO falló inicialmente con trimmedDateInput
       const parts = trimmedDateInput.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
       if (parts) {
         let day, month, year;
@@ -111,26 +154,20 @@ const convertToYYYYMMDD = (dateInput: any): string | undefined => {
         } else {
             year = part3;
         }
+        
+        if (part1 > 12) { day = part1; month = part2; } 
+        else if (part2 > 12) { month = part1; day = part2; } 
+        else { day = part1; month = part2; }
 
-        if (part1 > 12 && part2 <= 12) {
-            day = part1; month = part2;
-        } else if (part1 <= 12 && part2 > 12) {
-            month = part1; day = part2;
-        } else if (part1 <=12 && part2 <=12) {
-            day = part1; month = part2;
-        } else {
-            // console.warn(`convertToYYYYMMDD: Invalid day/month in string: ${trimmedDateInput}`);
-            return undefined;
-        }
 
         if (year && month && day) {
             date = new Date(Date.UTC(year, month - 1, day));
             if (!isValid(date) || date.getUTCFullYear() !== year || date.getUTCMonth() !== month -1 || date.getUTCDate() !== day) {
-                // console.warn(`convertToYYYYMMDD: Date rolled over or invalid after construction: ${trimmedDateInput}`);
+                // console.warn(`convertToYYYYMMDD: Date rolled over or invalid after construction from non-ISO: ${trimmedDateInput}`);
                 return undefined;
             }
         } else {
-            // console.warn(`convertToYYYYMMDD: Could not parse day/month/year from: ${trimmedDateInput}`);
+            // console.warn(`convertToYYYYMMDD: Could not parse day/month/year from non-ISO: ${trimmedDateInput}`);
             return undefined;
         }
       } else {
@@ -236,11 +273,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const latestEvent = sortedEvents[0];
         newStatus = latestEvent.newStatus;
         newLastStatusUpdate = latestEvent.date;
-      } else if (panelToUpdate.installationDate && isValidDateString(panelToUpdate.installationDate)) {
-        newStatus = panelToUpdate.status;
-        newLastStatusUpdate = panelToUpdate.installationDate;
-        if (newStatus === 'pending_installation' && parseISO(panelToUpdate.installationDate) <= parseISO(todayStr)) {
-          newStatus = 'installed';
+      } else if (panelToUpdate.piv_instalado && isValidDateString(panelToUpdate.piv_instalado)) {
+        newStatus = panelToUpdate.status; // Podría ser 'pending_installation' o 'installed' ya desde la importación
+        newLastStatusUpdate = panelToUpdate.piv_instalado;
+        if (newStatus === 'pending_installation' && parseISO(panelToUpdate.piv_instalado) <= parseISO(todayStr)) {
+          // Esta lógica podría simplificarse si la importación ya establece el estado correcto
+          // newStatus = 'installed';
         }
       } else {
         newStatus = panelToUpdate.status || 'unknown';
@@ -273,15 +311,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
 
       let currentStatus = panel.status;
-      let currentLastStatusUpdate = panel.lastStatusUpdate || (panel.installationDate && isValidDateString(panel.installationDate) ? panel.installationDate : null);
+      let currentLastStatusUpdate = panel.lastStatusUpdate || (panel.piv_instalado && isValidDateString(panel.piv_instalado) ? panel.piv_instalado : null);
 
       if (relevantEvents.length > 0) {
         currentStatus = relevantEvents[0].newStatus;
         currentLastStatusUpdate = relevantEvents[0].date;
-      } else if (panel.installationDate && isValidDateString(panel.installationDate)) {
-        // Logic for status update based on installation date might be too simplistic here
-        // Keeping it as is, but primary status update logic should be in refreshPanelStatus
-        // or based on PIV dates if those become the single source of truth for status.
+      } else if (panel.piv_instalado && isValidDateString(panel.piv_instalado)) {
+        // This is primarily for panels with no events after initial import.
+        // Status should be set correctly during import based on 'Vigencia' or default.
       }
       return { ...panel, status: currentStatus, lastStatusUpdate: currentLastStatusUpdate };
     }).sort((a, b) => a.codigo_parada.localeCompare(b.codigo_parada));
@@ -296,7 +333,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
     const newPanel = {
         ...panel,
-        lastStatusUpdate: panel.installationDate || panel.lastStatusUpdate || format(new Date(), 'yyyy-MM-dd')
+        lastStatusUpdate: panel.lastStatusUpdate || panel.piv_instalado || format(new Date(), 'yyyy-MM-dd')
     };
     setPanels(prev => [...prev, newPanel].sort((a, b) => a.codigo_parada.localeCompare(b.codigo_parada)));
     return { success: true, message: `Panel ${panel.codigo_parada} añadido.` };
@@ -474,10 +511,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           const vigencia_cleaned = (vigencia_raw !== undefined && vigencia_raw !== null) ? String(vigencia_raw).trim().toLowerCase() : "";
           const panelStatus = vigenciaStatusMapping[vigencia_cleaned] || 'pending_installation';
 
-          const installationDateExcel = row['Última instalación/reinstalación'];
-          let installationDate_converted = convertToYYYYMMDD(installationDateExcel);
-          if (installationDateExcel && String(installationDateExcel).trim() !== '' && !installationDate_converted) {
-            errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada || 'ID no encontrado'}): Fecha 'Última instalación/reinstalación' inválida: '${installationDateExcel}'. Se asignará Nulo.`);
+          const installationDateExcelRaw = row['Última instalación/reinstalación'];
+          let installationDate_converted = convertToYYYYMMDD(installationDateExcelRaw);
+          if (installationDateExcelRaw && String(installationDateExcelRaw).trim() !== '' && !installationDate_converted) {
+            errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada || 'ID no encontrado'}): Fecha 'Última instalación/reinstalación' inválida: '${installationDateExcelRaw}'. Se asignará Nulo.`);
             installationDate_converted = undefined; 
           }
 
@@ -541,8 +578,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             client: cliente,
             address: direccion || "Sin dirección",
             notes: notas,
+            // installationDate se refiere a "Última instalación/reinstalación" y es más general
             installationDate: installationDate_converted === undefined ? null : installationDate_converted,
-            lastStatusUpdate: installationDate_converted === undefined ? null : installationDate_converted || format(new Date(), 'yyyy-MM-dd'),
+            lastStatusUpdate: piv_instalado_converted || installationDate_converted || format(new Date(), 'yyyy-MM-DD'),
 
             piv_instalado: piv_instalado_converted || null,
             piv_desinstalado: piv_desinstalado_converted || null,
@@ -579,17 +617,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                });
             }
           }
-
-          // console.log('Verificación Fechas PIV:', {
-          //   codigo_parada: newPanel.codigo_parada,
-          //   piv_instalado: newPanel.piv_instalado,
-          //   piv_desinstalado: newPanel.piv_desinstalado,
-          //   piv_reinstalado: newPanel.piv_reinstalado,
-          //   installationDate: newPanel.installationDate,
-          //   raw_piv_instalado: pivInstaladoRaw,
-          //   raw_ultima_instalacion: installationDateExcel
-          // });
-
+          
           newPanelsToImport.push(newPanel);
           importedPanelIdsInFile.add(codigo_parada);
           addedCount++;
@@ -600,7 +628,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         if (newPanelsToImport.length > 0) {
           setPanels(prev => [...prev, ...newPanelsToImport].sort((a, b) => a.codigo_parada.localeCompare(b.codigo_parada)));
         }
-    } else {
+    } else { // monthly events
         const newEventsToImport: PanelEvent[] = [];
         const currentPanelIdsSet = new Set(panels.map(p => p.codigo_parada));
         const headerMapping: { [key: string]: keyof PanelEvent | string } = {
@@ -654,7 +682,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             const validationErrors: string[] = [];
             if (!panelEvent.date) {
                 // Error ya registrado si la fecha original existía pero no se pudo convertir
-                if (!(row['fecha'] && String(row['fecha']).trim() !== '')) { // Solo añadir si la celda estaba realmente vacía.
+                if (!(row['fecha'] && String(row['fecha']).trim() !== '')) { 
                   validationErrors.push(`fecha de evento es obligatoria.`);
                 }
             }
@@ -731,7 +759,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     return {
         success: opSuccess,
         message: opMessage,
-        errors: errors.length > 0 ? errors.slice(0, 10) : undefined, // Devuelve solo los primeros 10 errores para no sobrecargar
+        errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
         addedCount,
         skippedCount,
         processedCount: jsonData.length,
@@ -740,12 +768,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [panels, panelEvents, refreshPanelStatus]);
 
   const deletePanel = useCallback(async (panelId: string): Promise<DataOperationResult> => {
-    console.warn(`Delete operation for panel ${panelId} is not fully implemented.`);
+    // console.warn(`Delete operation for panel ${panelId} is not fully implemented.`);
     return { success: false, message: "Función de eliminación no implementada." };
   }, []);
 
   const deletePanelEvent = useCallback(async (eventId: string): Promise<DataOperationResult> => {
-    console.warn(`Delete operation for event ${eventId} is not fully implemented.`);
+    // console.warn(`Delete operation for event ${eventId} is not fully implemented.`);
     return { success: false, message: "Función de eliminación no implementada." };
   }, []);
 
@@ -790,4 +818,15 @@ export const useData = () => {
   return context;
 };
 
+// Helper function to check if a date string is valid YYYY-MM-DD
+// This is also used in billing-utils, ensure consistency or centralize
+const isValidDateString = (dateStr: any): dateStr is string => {
+  if (typeof dateStr !== 'string' || !dateStr.trim()) return false;
+  // Check for YYYY-MM-DD format, optionally followed by time
+  if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/.test(dateStr) && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return false;
+  }
+  const dateObj = parseISO(dateStr.substring(0,10)); // Check only the date part for validity
+  return isValid(dateObj);
+};
     
