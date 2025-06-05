@@ -6,20 +6,33 @@ import { es } from 'date-fns/locale';
 const MAX_MONTHLY_RATE = 37.70;
 const DAYS_IN_STANDARD_MONTH = 30;
 
-// Checks if a string is a valid date in "YYYY-MM-DD" format (first 10 chars)
+// POLICY DOCUMENTATION: Date Handling
+// Dates from Excel might come as "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD".
+// All date parsing functions should robustly handle this by taking the first 10 characters ("YYYY-MM-DD").
+
+/**
+ * Checks if a string is a valid date in "YYYY-MM-DD" format (first 10 chars).
+ * @param dateStr The date string to validate.
+ * @returns True if the string is a valid date, false otherwise.
+ */
 const isValidDateString = (dateStr: any): dateStr is string => {
     if (typeof dateStr !== 'string' || !dateStr.trim()) return false;
-    const datePart = dateStr.substring(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) { // Strict check for YYYY-MM-DD
+    const datePart = dateStr.substring(0, 10); // Work with the date part only
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) { // Strict check for YYYY-MM-DD format
         return false;
     }
     const dateObj = parseISO(datePart);
     // Ensure that parseISO result matches the input string date part after formatting back
+    // This catches invalid dates like "2023-02-30" which parseISO might adjust.
     return isValid(dateObj) && formatDateFns(dateObj, 'yyyy-MM-dd') === datePart;
 };
 
-// Parses a "YYYY-MM-DD" string (or "YYYY-MM-DD HH:MM:SS") into a UTC Date object
-// Only considers the first 10 characters.
+/**
+ * Parses a "YYYY-MM-DD" string (or the date part of "YYYY-MM-DD HH:MM:SS") into a UTC Date object.
+ * Only considers the first 10 characters.
+ * @param dateString The date string to parse.
+ * @returns A Date object, or throws if parsing fails.
+ */
 const parseDate = (dateString: string): Date => {
   const datePart = dateString.substring(0, 10); // Extract "YYYY-MM-DD"
   const [year, month, day] = datePart.split('-').map(Number);
@@ -37,18 +50,40 @@ export interface BillingRecord {
   panelDetails?: Panel;
 }
 
+/**
+ * POLICY DOCUMENTATION: Calculation of Billable Days
+ * - Day of Installation: IS facturable. If a panel is installed on day X, day X counts.
+ * - Day of Desinstallation: IS facturable. Panels are considered active for the entirety of their desinstallation day (e.g., desinstalled at 23:59).
+ * - Multiple Events: This function relies on `panel.piv_instalado`, `panel.piv_desinstalado`, `panel.piv_reinstalado`.
+ *   These fields should represent the primary billing cycle. Complex, multiple on/off events within a short period might require
+ *   these fields to be updated to reflect the 'effective' latest billing cycle or for this function to be redesigned
+ *   to process a full event history for the panel.
+ * - Source of Truth: The PIV-specific date fields (`piv_instalado`, `piv_desinstalado`, `piv_reinstalado`) are prioritized.
+ */
 function calculateBillableDaysFromPIVDates(panel: Panel, year: number, month: number): number {
   const actualDaysInBillingMonth = getDaysInActualMonthFns(new Date(Date.UTC(year, month - 1, 1)));
   
-  const pivInstallDate = panel.piv_instalado && isValidDateString(panel.piv_instalado) ? parseDate(panel.piv_instalado) : null;
-  const pivDesinstallDate = panel.piv_desinstalado && isValidDateString(panel.piv_desinstalado) ? parseDate(panel.piv_desinstalado) : null;
-  const pivReinstallDate = panel.piv_reinstalado && isValidDateString(panel.piv_reinstalado) ? parseDate(panel.piv_reinstalado) : null;
+  // Ensure we only use the date part (YYYY-MM-DD) for parsing
+  const pivInstallStr = panel.piv_instalado ? panel.piv_instalado.substring(0, 10) : null;
+  const pivDesinstallStr = panel.piv_desinstalado ? panel.piv_desinstalado.substring(0, 10) : null;
+  const pivReinstallStr = panel.piv_reinstalado ? panel.piv_reinstalado.substring(0, 10) : null;
 
+  const pivInstallDate = pivInstallStr && isValidDateString(pivInstallStr)
+    ? parseDate(pivInstallStr)
+    : null;
+  const pivDesinstallDate = pivDesinstallStr && isValidDateString(pivDesinstallStr)
+    ? parseDate(pivDesinstallStr)
+    : null;
+  const pivReinstallDate = pivReinstallStr && isValidDateString(pivReinstallStr)
+    ? parseDate(pivReinstallStr)
+    : null;
+
+  // If "PIV Instalado" is empty or invalid, the panel is never facturable based on these fields.
   if (!pivInstallDate) {
     // console.log(`[Panel ${panel.codigo_parada}] PIV Billing: No valid piv_instalado date. Billable days: 0.`);
     return 0;
   }
-
+  
   // console.log(`[Panel ${panel.codigo_parada}] PIV Billing for ${year}-${String(month).padStart(2,'0')}: (Nat Days In Month: ${actualDaysInBillingMonth})`, {
   //   piv_instalado_raw: panel.piv_instalado,
   //   piv_desinstalado_raw: panel.piv_desinstalado,
@@ -63,12 +98,17 @@ function calculateBillableDaysFromPIVDates(panel: Panel, year: number, month: nu
     const currentDate = new Date(Date.UTC(year, month - 1, day));
     let isEffectivelyInstalledToday = false;
 
+    // Rule 1: Must be on or after PIV Installation Date
     if (currentDate >= pivInstallDate) {
         isEffectivelyInstalledToday = true; 
 
+        // Rule 2: Consider PIV Desinstallation
+        // Panel is considered active ON its desinstallation day. Inactive AFTER.
         if (pivDesinstallDate && pivDesinstallDate >= pivInstallDate) {
-            if (currentDate > pivDesinstallDate) { 
+            if (currentDate > pivDesinstallDate) { // Inactive strictly AFTER desinstallation day
                 isEffectivelyInstalledToday = false; 
+                
+                // Rule 3: Consider PIV Reinstallation
                 if (pivReinstallDate && pivReinstallDate > pivDesinstallDate) {
                     if (currentDate >= pivReinstallDate) {
                         isEffectivelyInstalledToday = true; 
@@ -87,20 +127,17 @@ function calculateBillableDaysFromPIVDates(panel: Panel, year: number, month: nu
 }
 
 
-function calculateProportionalBilling(
-  daysToBill: number,
-  baseMonthlyAmount: number,
-  daysForDailyRateCalculation: number // Should typically be DAYS_IN_STANDARD_MONTH
-): number {
-  if (daysToBill <= 0 || baseMonthlyAmount <= 0 || daysForDailyRateCalculation <= 0) return 0;
-
-  const dailyRate = baseMonthlyAmount / daysForDailyRateCalculation;
-  const proportionalAmount = daysToBill * dailyRate;
-
-  return parseFloat(proportionalAmount.toFixed(2));
-}
-
-
+/**
+ * POLICY DOCUMENTATION: Monthly Billing Calculation & UI Display
+ * - Billing Standard: A standard billing month has 30 days (DAYS_IN_STANDARD_MONTH).
+ * - Daily Rate: Calculated as MAX_MONTHLY_RATE / DAYS_IN_STANDARD_MONTH.
+ * - Full Month Activity: If a panel is active for all natural days of a month (e.g., 31 days in May, 28 in Feb),
+ *   it is billed for 30 standard days. UI shows "30 / 30". Amount = MAX_MONTHLY_RATE.
+ * - Partial Month Activity: If a panel is active for fewer than the natural days of a month (due to mid-month
+ *   installation/desinstallation), it is billed for the actual number of active days.
+ *   UI shows "Actual Active Days / Natural Days in Month" (e.g., "15 / 31").
+ *   Amount = Actual Active Days * Daily Rate.
+ */
 export function calculateMonthlyBillingForPanel(
   panelId: string,
   year: number,
@@ -118,35 +155,37 @@ export function calculateMonthlyBillingForPanel(
   const actualActivityDays = calculateBillableDaysFromPIVDates(panel, year, month);
 
   let daysForBillingNumerator: number;
-  let daysForBillingDenominator: number;
+  let daysForBillingDenominator: number; // For UI display denominator
 
   if (actualActivityDays >= actualDaysInBillingMonth) { 
+    // Panel active for the entire natural month, bill as a standard 30-day month
     daysForBillingNumerator = DAYS_IN_STANDARD_MONTH;
-    daysForBillingDenominator = DAYS_IN_STANDARD_MONTH; // Show as 30/30 if active all natural days
+    daysForBillingDenominator = DAYS_IN_STANDARD_MONTH; // UI shows "30 / 30"
   } else {
+    // Panel active for part of the month
     daysForBillingNumerator = actualActivityDays;
-    daysForBillingDenominator = actualDaysInBillingMonth; // Show as X / natural_days if partial
+    daysForBillingDenominator = actualDaysInBillingMonth; // UI shows "X / NaturalDays"
   }
 
+  // Use the panel's specific monthly rate if available and valid, otherwise use the max rate
+  // Note: panel.importe_mensual is set to 0 during import in DataProvider; this logic relies on MAX_MONTHLY_RATE.
+  // If panel.importe_mensual were to be used, it should be parsed and validated.
   const finalBaseAmount = (panel.importe_mensual && panel.importe_mensual > 0)
-                              ? panel.importe_mensual
+                              ? panel.importe_mensual 
                               : MAX_MONTHLY_RATE;
-
-  // Amount is calculated based on daysForBillingNumerator and a daily rate derived from DAYS_IN_STANDARD_MONTH
-  const amount = calculateProportionalBilling(
-                      daysForBillingNumerator,
-                      finalBaseAmount,
-                      DAYS_IN_STANDARD_MONTH 
-                    );
   
-  // console.log(`[BillingCalc ${panel.codigo_parada}] For ${year}-${String(month).padStart(2,'0')}: ActDays=${actualActivityDays}, NatDaysInM=${actualDaysInBillingMonth}, BillNum=${daysForBillingNumerator}, BillDenom=${daysForBillingDenominator} BaseAmt=${finalBaseAmount.toFixed(2)}, Amount=${amount.toFixed(2)}`);
+  const dailyRate = finalBaseAmount / DAYS_IN_STANDARD_MONTH;
+  const calculatedAmount = daysForBillingNumerator * dailyRate;
+  const amount = parseFloat(calculatedAmount.toFixed(2));
+  
+  // console.log(`[BillingCalc ${panel.codigo_parada}] For ${year}-${String(month).padStart(2,'0')}: ActDays=${actualActivityDays}, NatDaysInM=${actualDaysInBillingMonth}, NumBill=${daysForBillingNumerator}, DenomUI=${daysForBillingDenominator}, BaseAmt=${finalBaseAmount.toFixed(2)}, Amount=${amount.toFixed(2)}`);
   
   return {
     panelId,
     year,
     month,
-    billedDays: daysForBillingNumerator, // This is the numerator (e.g., 30 or actual partial days)
-    totalDaysInMonth: daysForBillingDenominator, // This is the denominator (e.g., 30 or natural days for partial)
+    billedDays: daysForBillingNumerator, 
+    totalDaysInMonth: daysForBillingDenominator, 
     amount,
     panelDetails: panel,
   };
@@ -172,14 +211,28 @@ export function getPanelHistoryForBillingMonth(
 
   const panelEventsForThisPanel = allEvents
     .filter(event => event.panelId === panelId && event.date && isValidDateString(event.date))
-    .sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+    .sort((a, b) => {
+        // Ensure dates are parsed correctly (substring for safety)
+        const dateAStr = a.date ? a.date.substring(0,10) : null;
+        const dateBStr = b.date ? b.date.substring(0,10) : null;
+        if (!dateAStr || !dateBStr) return 0;
+        const dateA = parseDate(dateAStr).getTime();
+        const dateB = parseDate(dateBStr).getTime();
+        if (isNaN(dateA) || isNaN(dateB)) return 0;
+        return dateA - dateB;
+    });
 
   const actualDaysInMonth = getDaysInActualMonthFns(new Date(Date.UTC(year, month - 1, 1)));
   const dailyHistory: DayStatus[] = [];
 
-  const pivInstallDateForHist = panel.piv_instalado && isValidDateString(panel.piv_instalado) ? parseDate(panel.piv_instalado) : null;
-  const pivDesinstallDateForHist = panel.piv_desinstalado && isValidDateString(panel.piv_desinstalado) ? parseDate(panel.piv_desinstalado) : null;
-  const pivReinstallDateForHist = panel.piv_reinstalado && isValidDateString(panel.piv_reinstalado) ? parseDate(panel.piv_reinstalado) : null;
+  // Use substring for safety, similar to calculateBillableDaysFromPIVDates
+  const pivInstallStrHist = panel.piv_instalado ? panel.piv_instalado.substring(0, 10) : null;
+  const pivDesinstallStrHist = panel.piv_desinstalado ? panel.piv_desinstalado.substring(0, 10) : null;
+  const pivReinstallStrHist = panel.piv_reinstalado ? panel.piv_reinstalado.substring(0, 10) : null;
+
+  const pivInstallDateForHist = pivInstallStrHist && isValidDateString(pivInstallStrHist) ? parseDate(pivInstallStrHist) : null;
+  const pivDesinstallDateForHist = pivDesinstallStrHist && isValidDateString(pivDesinstallStrHist) ? parseDate(pivDesinstallStrHist) : null;
+  const pivReinstallDateForHist = pivReinstallStrHist && isValidDateString(pivReinstallStrHist) ? parseDate(pivReinstallStrHist) : null;
 
   const statusTranslations: Record<PivPanelStatus, string> = {
     installed: "Instalado",
@@ -204,7 +257,8 @@ export function getPanelHistoryForBillingMonth(
             pivDerivedStatusToday = 'installed';
 
             if (pivDesinstallDateForHist && pivDesinstallDateForHist >= pivInstallDateForHist) {
-                if (currentDate > pivDesinstallDateForHist) { // Day of deinstall is billable
+                 // Day of deinstall is billable, inactive strictly AFTER
+                if (currentDate > pivDesinstallDateForHist) { 
                     isBillableTodayBasedOnPIV = false;
                     pivDerivedStatusToday = 'removed';
 
@@ -227,7 +281,11 @@ export function getPanelHistoryForBillingMonth(
 
 
     let finalStatusForDisplay = pivDerivedStatusToday;
-    const eventsOnThisDay = panelEventsForThisPanel.filter(event => formatDateFns(parseDate(event.date), 'yyyy-MM-dd', { locale: es }) === currentDateStr);
+    const eventsOnThisDay = panelEventsForThisPanel.filter(event => {
+        const eventDateStr = event.date ? event.date.substring(0,10) : null;
+        if (!eventDateStr) return false;
+        return formatDateFns(parseDate(eventDateStr), 'yyyy-MM-dd', { locale: es }) === currentDateStr;
+    });
 
     if (eventsOnThisDay.length > 0) {
       const latestEventToday = eventsOnThisDay[eventsOnThisDay.length - 1];
@@ -249,3 +307,5 @@ export function getPanelHistoryForBillingMonth(
   }
   return dailyHistory;
 }
+
+    

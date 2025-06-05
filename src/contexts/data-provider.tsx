@@ -4,7 +4,7 @@
 import type { Panel, PanelEvent, PanelStatus } from '@/types/piv';
 import { ALL_PANEL_STATUSES } from '@/types/piv';
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import { format, parseISO, isValid, getDaysInMonth as getDaysInActualMonthFnsDateFns } from 'date-fns'; // Renamed to avoid conflict
+import { format, parseISO, isValid, getDaysInMonth as getDaysInActualMonthFnsDateFns, format as formatDateFnsInternal } from 'date-fns'; // Renamed to avoid conflict
 import * as XLSX from 'xlsx';
 
 interface DataOperationResult {
@@ -60,7 +60,7 @@ const convertExcelSerialToDate = (serial: number): Date | undefined => {
 
 
 const convertToYYYYMMDD = (dateInput: any): string | undefined => {
-  if (dateInput === null || dateInput === undefined || String(dateInput).trim() === "") {
+  if (dateInput === null || dateInput === undefined || String(dateInput).trim() === "" || String(dateInput).trim().toLowerCase() === "nan") {
     return undefined;
   }
 
@@ -80,25 +80,21 @@ const convertToYYYYMMDD = (dateInput: any): string | undefined => {
         return undefined;
     }
   } else if (typeof dateInput === 'string') {
-    let trimmedDateInput = dateInput.trim();
+    let originalTrimmedDateInput = dateInput.trim();
+    // Always take the first 10 characters if the string is longer, assuming "YYYY-MM-DD" part.
+    let datePartToParse = originalTrimmedDateInput.length > 10 ? originalTrimmedDateInput.substring(0, 10) : originalTrimmedDateInput;
     
-    // Extraer solo la parte YYYY-MM-DD si el string es más largo (ej. "YYYY-MM-DD HH:MM:SS")
-    if (trimmedDateInput.length > 10) {
-        trimmedDateInput = trimmedDateInput.substring(0, 10);
-    }
-
-    let parsedDate = parseISO(trimmedDateInput); // parseISO maneja bien "YYYY-MM-DD"
-    if (isValid(parsedDate)) {
-      // Evitar que un año solo como "2024" se interprete como una fecha válida
-      if (/^\d{4}$/.test(trimmedDateInput) && trimmedDateInput.length === 4) {
-          // console.warn(`convertToYYYYMMDD: Ambiguous year-only string: ${trimmedDateInput}`);
-          return undefined;
-      }
-      // Verificar que el formato original era YYYY-MM-DD antes de parseISO
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDateInput)) {
-        // Podría ser un formato como DD/MM/YYYY que parseISO no maneja como esperamos sin transformacion
-        // Intentar parsear formatos DD/MM/YYYY o DD-MM-YY
-        const parts = trimmedDateInput.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+    // Check if datePartToParse is now exactly "YYYY-MM-DD"
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePartToParse)) {
+        let parsedDate = parseISO(datePartToParse);
+        if (isValid(parsedDate) && formatDateFnsInternal(parsedDate, 'yyyy-MM-dd') === datePartToParse) {
+            date = parsedDate;
+        } else {
+            // console.warn(`convertToYYYYMMDD: Invalid YYYY-MM-DD string: ${datePartToParse}`);
+            return undefined;
+        }
+    } else { // Not in YYYY-MM-DD format, try DD/MM/YYYY or DD-MM-YY
+        const parts = datePartToParse.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
         if (parts) {
             let day, month, year;
             const part1 = parseInt(parts[1], 10);
@@ -110,70 +106,28 @@ const convertToYYYYMMDD = (dateInput: any): string | undefined => {
             } else { // YYYY
                 year = part3;
             }
-            // Asumir DD/MM/YYYY si no se puede determinar de otra forma, o MM/DD/YYYY
-            // Esta lógica es simple y puede necesitar ajuste para ambigüedad MM/DD vs DD/MM
-            // Por ahora, asumimos que si part1 > 12, es DD/MM. Si no, podría ser MM/DD o DD/MM.
-            // Para simplificar, vamos a preferir DD/MM si es ambiguo.
-            if (part1 > 12) { // Claramente DD/MM/YYYY
-                day = part1; month = part2;
-            } else if (part2 > 12) { // Claramente MM/DD/YYYY
-                month = part1; day = part2;
-            } else { // Ambiguo (ej. 01/02/2023), asumimos DD/MM por defecto en muchos contextos ES
-                day = part1; month = part2;
-            }
-
+            
+            // Assuming DD/MM for ES locale if ambiguous
+            if (part1 > 12) { day = part1; month = part2; } 
+            else if (part2 > 12) { month = part1; day = part2; } 
+            else { day = part1; month = part2; }
 
             if (year && month && day) {
-                parsedDate = new Date(Date.UTC(year, month - 1, day));
-                 if (!isValid(parsedDate) || parsedDate.getUTCFullYear() !== year || parsedDate.getUTCMonth() !== month -1 || parsedDate.getUTCDate() !== day) {
-                    // console.warn(`convertToYYYYMMDD: Date rolled over or invalid after DD/MM/YYYY construction: ${trimmedDateInput}`);
+                const tempDate = new Date(Date.UTC(year, month - 1, day));
+                 if (isValid(tempDate) && tempDate.getUTCFullYear() === year && tempDate.getUTCMonth() === month -1 && tempDate.getUTCDate() === day) {
+                    date = tempDate;
+                } else {
+                    // console.warn(`convertToYYYYMMDD: Date rolled over or invalid after DD/MM/YYYY construction: ${datePartToParse}`);
                     return undefined;
                 }
-                date = parsedDate;
             } else {
-                 // console.warn(`convertToYYYYMMDD: Could not parse day/month/year from parts: ${trimmedDateInput}`);
+                 // console.warn(`convertToYYYYMMDD: Could not parse day/month/year from parts: ${datePartToParse}`);
                 return undefined;
             }
         } else {
-             // console.warn(`convertToYYYYMMDD: String is not YYYY-MM-DD and not DD/MM/YYYY: ${trimmedDateInput}`);
-            return undefined; // No es YYYY-MM-DD y no se pudo parsear como DD/MM/YYYY
-        }
-      } else {
-        date = parsedDate; // Era YYYY-MM-DD
-      }
-    } else { // parseISO falló inicialmente con trimmedDateInput
-      const parts = trimmedDateInput.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
-      if (parts) {
-        let day, month, year;
-        const part1 = parseInt(parts[1], 10);
-        const part2 = parseInt(parts[2], 10);
-        let part3 = parseInt(parts[3], 10);
-
-        if (parts[3].length === 2) {
-            year = part3 < 70 ? 2000 + part3 : 1900 + part3;
-        } else {
-            year = part3;
-        }
-        
-        if (part1 > 12) { day = part1; month = part2; } 
-        else if (part2 > 12) { month = part1; day = part2; } 
-        else { day = part1; month = part2; }
-
-
-        if (year && month && day) {
-            date = new Date(Date.UTC(year, month - 1, day));
-            if (!isValid(date) || date.getUTCFullYear() !== year || date.getUTCMonth() !== month -1 || date.getUTCDate() !== day) {
-                // console.warn(`convertToYYYYMMDD: Date rolled over or invalid after construction from non-ISO: ${trimmedDateInput}`);
-                return undefined;
-            }
-        } else {
-            // console.warn(`convertToYYYYMMDD: Could not parse day/month/year from non-ISO: ${trimmedDateInput}`);
+             // console.warn(`convertToYYYYMMDD: Unparseable date string (not YYYY-MM-DD and not DD/MM/YYYY-like): ${datePartToParse}`);
             return undefined;
         }
-      } else {
-        // console.warn(`convertToYYYYMMDD: Unparseable date string: ${trimmedDateInput}`);
-        return undefined;
-      }
     }
   } else {
     // console.warn(`convertToYYYYMMDD: Unsupported date input type: ${typeof dateInput}`);
@@ -259,27 +213,22 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       const sortedEvents = [...eventsForPanel]
         .sort((a, b) => {
-            const dateA = parseISO(a.date).getTime();
-            const dateB = parseISO(b.date).getTime();
+            const dateA = parseISO(a.date.substring(0,10)).getTime(); // Use substring for safety
+            const dateB = parseISO(b.date.substring(0,10)).getTime(); // Use substring for safety
             if (isNaN(dateA) || isNaN(dateB)) return 0;
             return dateB - dateA;
         });
 
       let newStatus = panelToUpdate.status;
       let newLastStatusUpdate = panelToUpdate.lastStatusUpdate;
-      const todayStr = format(new Date(), 'yyyy-MM-dd');
-
+      
       if (sortedEvents.length > 0) {
         const latestEvent = sortedEvents[0];
         newStatus = latestEvent.newStatus;
-        newLastStatusUpdate = latestEvent.date;
+        newLastStatusUpdate = latestEvent.date; // This date is already YYYY-MM-DD
       } else if (panelToUpdate.piv_instalado && isValidDateString(panelToUpdate.piv_instalado)) {
-        newStatus = panelToUpdate.status; // Podría ser 'pending_installation' o 'installed' ya desde la importación
+        newStatus = panelToUpdate.status; 
         newLastStatusUpdate = panelToUpdate.piv_instalado;
-        if (newStatus === 'pending_installation' && parseISO(panelToUpdate.piv_instalado) <= parseISO(todayStr)) {
-          // Esta lógica podría simplificarse si la importación ya establece el estado correcto
-          // newStatus = 'installed';
-        }
       } else {
         newStatus = panelToUpdate.status || 'unknown';
         newLastStatusUpdate = panelToUpdate.lastStatusUpdate || undefined;
@@ -298,14 +247,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const initialPanelsData: Panel[] = [];
     const initialEventsData: PanelEvent[] = [];
 
-    // const todayStr = format(new Date(), 'yyyy-MM-dd');
-
     const panelsWithInitialStatus = initialPanelsData.map(panel => {
       const relevantEvents = initialEventsData
         .filter(e => e.panelId === panel.codigo_parada)
         .sort((a, b) => {
-            const dateA = parseISO(a.date).getTime();
-            const dateB = parseISO(b.date).getTime();
+            const dateA = parseISO(a.date.substring(0,10)).getTime();
+            const dateB = parseISO(b.date.substring(0,10)).getTime();
             if (isNaN(dateA) || isNaN(dateB)) return 0;
             return dateB - dateA;
         });
@@ -316,9 +263,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (relevantEvents.length > 0) {
         currentStatus = relevantEvents[0].newStatus;
         currentLastStatusUpdate = relevantEvents[0].date;
-      } else if (panel.piv_instalado && isValidDateString(panel.piv_instalado)) {
-        // This is primarily for panels with no events after initial import.
-        // Status should be set correctly during import based on 'Vigencia' or default.
       }
       return { ...panel, status: currentStatus, lastStatusUpdate: currentLastStatusUpdate };
     }).sort((a, b) => a.codigo_parada.localeCompare(b.codigo_parada));
@@ -365,8 +309,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const getEventsForPanel = useCallback((panelId: string) => {
     return panelEvents.filter(e => e.panelId === panelId).sort((a, b) => {
-        const dateA = parseISO(a.date).getTime();
-        const dateB = parseISO(b.date).getTime();
+        const dateA = parseISO(a.date.substring(0,10)).getTime();
+        const dateB = parseISO(b.date.substring(0,10)).getTime();
         if (isNaN(dateA) || isNaN(dateB)) return 0;
         return dateA - dateB;
     });
@@ -374,7 +318,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const addPanelEvent = useCallback(async (event: Partial<PanelEvent>): Promise<DataOperationResult> => {
     if (!event.panelId) return { success: false, message: "Panel ID es obligatorio para el evento." };
-    const newEventWithId = { ...event, id: event.id || crypto.randomUUID() } as PanelEvent;
+    // Ensure date is YYYY-MM-DD
+    const eventDate = event.date ? convertToYYYYMMDD(event.date) : undefined;
+    if (!eventDate) return { success: false, message: "Fecha de evento inválida o faltante." };
+
+    const newEventWithId = { ...event, date: eventDate, id: event.id || crypto.randomUUID() } as PanelEvent;
+
 
     let latestEventsForPanel: PanelEvent[];
     setPanelEvents(prevEvents => {
@@ -396,6 +345,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     let originalPanelIdForRefresh: string | undefined;
     let eventExists = false;
     let latestEventsList: PanelEvent[] = [];
+
+    // Ensure date in updates is YYYY-MM-DD if present
+    if (updates.date) {
+        const updatedDate = convertToYYYYMMDD(updates.date);
+        if (!updatedDate) return { success: false, message: "Fecha de evento actualizada inválida." };
+        updates.date = updatedDate;
+    }
 
     setPanelEvents(prevEvents => {
       const eventIndex = prevEvents.findIndex(e => e.id === eventId);
@@ -487,7 +443,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
 
         initialFilteredData.forEach((row, index) => {
-          const rowIndexForError = index + 6;
+          const rowIndexForError = index + 6; // Assuming data starts at row 6, headers at 5
 
           const codigo_parada_raw = row['Código parada'];
           const codigo_parada = codigo_parada_raw !== undefined && codigo_parada_raw !== null ? String(codigo_parada_raw).trim() : "";
@@ -510,11 +466,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           const vigencia_raw = row['Vigencia'];
           const vigencia_cleaned = (vigencia_raw !== undefined && vigencia_raw !== null) ? String(vigencia_raw).trim().toLowerCase() : "";
           const panelStatus = vigenciaStatusMapping[vigencia_cleaned] || 'pending_installation';
-
-          const installationDateExcelRaw = row['Última instalación/reinstalación'];
-          let installationDate_converted = convertToYYYYMMDD(installationDateExcelRaw);
-          if (installationDateExcelRaw && String(installationDateExcelRaw).trim() !== '' && !installationDate_converted) {
-            errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada || 'ID no encontrado'}): Fecha 'Última instalación/reinstalación' inválida: '${installationDateExcelRaw}'. Se asignará Nulo.`);
+          
+          const installationDateRaw = row['Última instalación/reinstalación'];
+          let installationDate_converted = convertToYYYYMMDD(installationDateRaw);
+          if (installationDateRaw && String(installationDateRaw).trim() !== '' && !installationDate_converted) {
+            errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada || 'ID no encontrado'}): Fecha 'Última instalación/reinstalación' inválida: '${installationDateRaw}'. Se asignará Nulo.`);
             installationDate_converted = undefined; 
           }
 
@@ -522,21 +478,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           let piv_instalado_converted = convertToYYYYMMDD(pivInstaladoRaw);
           if (pivInstaladoRaw && String(pivInstaladoRaw).trim() !== '' && !piv_instalado_converted) {
             errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada || 'ID no encontrado'}): Fecha 'PIV Instalado' inválida: '${pivInstaladoRaw}'. Se asignará Nulo.`);
-            piv_instalado_converted = undefined;
           }
 
           const pivDesinstaladoRaw = row['PIV Desinstalado'];
           let piv_desinstalado_converted = convertToYYYYMMDD(pivDesinstaladoRaw);
-          if (pivDesinstaladoRaw && String(pivDesinstaladoRaw).trim() !== '' && !piv_desinstalado_converted) {
+           if (pivDesinstaladoRaw && String(pivDesinstaladoRaw).trim() !== '' && !piv_desinstalado_converted) {
             errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada || 'ID no encontrado'}): Fecha 'PIV Desinstalado' inválida: '${pivDesinstaladoRaw}'. Se asignará Nulo.`);
-            piv_desinstalado_converted = undefined;
           }
 
           const pivReinstaladoRaw = row['PIV Reinstalado'];
           let piv_reinstalado_converted = convertToYYYYMMDD(pivReinstaladoRaw);
            if (pivReinstaladoRaw && String(pivReinstaladoRaw).trim() !== '' && !piv_reinstalado_converted) {
             errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada || 'ID no encontrado'}): Fecha 'PIV Reinstalado' inválida: '${pivReinstaladoRaw}'. Se asignará Nulo.`);
-            piv_reinstalado_converted = undefined;
           }
 
           const cliente_raw = row['Empresas concesionarias'];
@@ -567,8 +520,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           const tecnico = (tecnico_raw !== undefined && tecnico_raw !== null && String(tecnico_raw || '').trim() !== "") ? String(tecnico_raw || '').trim() : "Sin asignar";
 
           const facturacionOriginalRaw = row["Facturacion"];
-
-          const importe_mensual_para_calculo = 0;
+          const importe_mensual_para_calculo = 0; // Billing calculation now uses MAX_MONTHLY_RATE by default
 
 
           const newPanel: Panel = {
@@ -578,8 +530,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             client: cliente,
             address: direccion || "Sin dirección",
             notes: notas,
-            // installationDate se refiere a "Última instalación/reinstalación" y es más general
-            installationDate: installationDate_converted === undefined ? null : installationDate_converted,
+            installationDate: installationDate_converted === undefined ? null : installationDate_converted, // General install date
             lastStatusUpdate: piv_instalado_converted || installationDate_converted || format(new Date(), 'yyyy-MM-DD'),
 
             piv_instalado: piv_instalado_converted || null,
@@ -593,11 +544,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             diagnostico: diagnostico,
             tecnico: tecnico,
 
-            importe_mensual: importe_mensual_para_calculo,
+            importe_mensual: importe_mensual_para_calculo, 
             importe_mensual_original: String(facturacionOriginalRaw || ''),
 
             fecha_importacion: new Date().toISOString(),
-            importado_por: "currentUser",
+            importado_por: "currentUser", // Placeholder
           };
 
           billingStats.totalPanels++;
@@ -641,7 +592,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const normalizeHeader = (header: string) => header.toLowerCase().trim();
 
         initialFilteredData.forEach((row, index) => {
-            const rowIndexForError = index + 2;
+            const rowIndexForError = index + 2; // Assuming data starts at row 2 for events
 
             const panelEvent: Partial<PanelEvent> = {};
             let panelIdFromRow: string | undefined = undefined;
@@ -681,7 +632,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
             const validationErrors: string[] = [];
             if (!panelEvent.date) {
-                // Error ya registrado si la fecha original existía pero no se pudo convertir
+                // Error already registered if the original date existed but couldn't be converted
                 if (!(row['fecha'] && String(row['fecha']).trim() !== '')) { 
                   validationErrors.push(`fecha de evento es obligatoria.`);
                 }
@@ -701,7 +652,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
             const isDuplicate = panelEvents.some(existingEvent =>
                 existingEvent.panelId === panelIdFromRow &&
-                existingEvent.date === panelEvent.date &&
+                existingEvent.date === panelEvent.date && // Dates are now YYYY-MM-DD
                 (existingEvent.oldStatus || undefined) === (panelEvent.oldStatus || undefined) &&
                 existingEvent.newStatus === panelEvent.newStatus
             ) || newEventsToImport.some(newEvent =>
@@ -720,7 +671,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             newEventsToImport.push({
                 id: crypto.randomUUID(),
                 panelId: panelIdFromRow,
-                date: panelEvent.date!,
+                date: panelEvent.date!, // Already validated and formatted
                 oldStatus: panelEvent.oldStatus as PanelStatus | undefined,
                 newStatus: panelEvent.newStatus as PanelStatus,
                 notes: panelEvent.notes ? String(panelEvent.notes) : undefined,
@@ -759,10 +710,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     return {
         success: opSuccess,
         message: opMessage,
-        errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
+        errors: errors.length > 0 ? errors.slice(0, 10) : undefined, // Show up to 10 errors
         addedCount,
         skippedCount,
-        processedCount: jsonData.length,
+        processedCount: jsonData.length, // Total rows from original file before filtering empty ones
         billingStats: fileType === 'initial' ? billingStats : undefined
     };
   }, [panels, panelEvents, refreshPanelStatus]);
@@ -818,15 +769,25 @@ export const useData = () => {
   return context;
 };
 
-// Helper function to check if a date string is valid YYYY-MM-DD
-// This is also used in billing-utils, ensure consistency or centralize
+/**
+ * Helper function to check if a date string is valid YYYY-MM-DD.
+ * It ensures the string, after potentially trimming to 10 chars,
+ * adheres to the YYYY-MM-DD format and represents a real date.
+ * @param dateStr The date string to validate.
+ * @returns True if valid, false otherwise.
+ */
 const isValidDateString = (dateStr: any): dateStr is string => {
   if (typeof dateStr !== 'string' || !dateStr.trim()) return false;
-  // Check for YYYY-MM-DD format, optionally followed by time
-  if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/.test(dateStr) && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+  
+  const datePart = dateStr.substring(0, 10); // Ensure we only work with the date part
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) { // Strict check for YYYY-MM-DD format
     return false;
   }
-  const dateObj = parseISO(dateStr.substring(0,10)); // Check only the date part for validity
-  return isValid(dateObj);
+  const dateObj = parseISO(datePart);
+  // Additionally, ensure that the parsed date, when formatted back, matches the input date part.
+  // This catches cases like "2023-02-30" which parseISO might adjust to "2023-03-02".
+  return isValid(dateObj) && formatDateFnsInternal(dateObj, 'yyyy-MM-dd') === datePart;
 };
+
     
