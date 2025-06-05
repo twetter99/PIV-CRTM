@@ -24,18 +24,12 @@ export default function BillingPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
 
   const billingData = useMemo(() => {
+    console.log(`[BillingPage] Recalculating billingData for Year: ${selectedYear}, Month: ${selectedMonth}`);
     return panels
-      .filter(panel => panel.status === 'installed')
       .map(panel => {
-        // Para la vista de resumen, mostramos el importe mensual fijo si está instalado.
-        // El cálculo prorrateado detallado se usa en la vista de detalles.
-        // O, si queremos que la tabla principal también muestre prorrateo, usamos calculateMonthlyBillingForPanel
-        // Por ahora, mantendremos el importe_mensual si está instalado todo el mes conceptualmente.
-        // La función calculateMonthlyBillingForPanel es más para el desglose detallado.
-        // Vamos a usar calculateMonthlyBillingForPanel para consistencia y prorrateo en la tabla principal también.
          return calculateMonthlyBillingForPanel(panel.codigo_parada, selectedYear, selectedMonth, panelEvents, panels);
       })
-      .filter(record => record.billedDays > 0 || record.panelDetails?.status === 'installed'); // Mostrar aunque los días facturados sean 0 si está instalado
+      .filter(record => record.billedDays > 0 || record.panelDetails?.status === 'installed'); 
   }, [panels, panelEvents, selectedYear, selectedMonth]);
 
   const totalBilledForMonth = useMemo(() => {
@@ -47,7 +41,6 @@ export default function BillingPage() {
 
   const handleExport = () => {
     try {
-      // Preparar datos para exportación
       const exportData = billingData.map(record => ({
         'ID Panel': record.panelId,
         'Cliente': record.panelDetails?.client || 'N/A',
@@ -60,7 +53,6 @@ export default function BillingPage() {
         'Fecha Instalación': record.panelDetails?.installationDate || 'N/A'
       }));
 
-      // Agregar fila de totales
       exportData.push({
         'ID Panel': 'TOTAL',
         'Cliente': '',
@@ -73,33 +65,21 @@ export default function BillingPage() {
         'Fecha Instalación': ''
       });
 
-      // Crear workbook
       const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
       
-      // Configurar ancho de columnas
       const colWidths = [
-        { wch: 12 }, // ID Panel
-        { wch: 25 }, // Cliente
-        { wch: 20 }, // Municipio
-        { wch: 15 }, // Días Facturados
-        { wch: 15 }, // Total Días Mes
-        { wch: 12 }, // Importe (€)
-        { wch: 20 }, // Estado
-        { wch: 30 }, // Dirección
-        { wch: 15 }  // Fecha Instalación
+        { wch: 12 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 },
+        { wch: 12 }, { wch: 20 }, { wch: 30 }, { wch: 15 }
       ];
       ws['!cols'] = colWidths;
 
-      // Agregar hoja al workbook
       const sheetName = `Facturación ${capitalizedMonthLabel} ${selectedYear}`;
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
-      // Descargar archivo
       const fileName = `Facturacion_${capitalizedMonthLabel}_${selectedYear}.xlsx`;
       XLSX.writeFile(wb, fileName);
 
-      // Mostrar confirmación
       alert(`Archivo exportado: ${fileName}`);
       
     } catch (error) {
