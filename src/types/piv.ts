@@ -7,7 +7,7 @@ export interface Panel {
   address: string;
   latitude?: number;
   longitude?: number;
-  installationDate?: string | null; // ISO date string YYYY-MM-DD
+  installationDate?: string | null; // General installation date, can be derived from piv_instalado or ultima_instalacion_o_reinstalacion
   status: PanelStatus;
   notes?: string;
   lastStatusUpdate?: string | null; // ISO date string YYYY-MM-DD
@@ -26,6 +26,17 @@ export interface Panel {
   piv_instalado?: string | null;        // YYYY-MM-DD
   piv_desinstalado?: string | null;     // YYYY-MM-DD  
   piv_reinstalado?: string | null;      // YYYY-MM-DD
+
+  importe_mensual?: number; // Calculated/standardized amount, often 0 initially from import.
+  importe_mensual_original?: string; // Raw value from Excel "Facturacion" column
+
+  // Additional fields from user request for mapping
+  marquesina?: string;
+  vigencia?: string; // Original value from Excel
+  empresa_concesionaria?: string; // Original value from Excel, can be same as client
+  cce?: string; // From Excel 'Cce'
+  ultima_instalacion_o_reinstalacion?: string | null; // YYYY-MM-DD, from Excel
+
 
   [key: string]: any; // For additional dynamic fields
 }
