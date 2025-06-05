@@ -33,9 +33,7 @@ export interface BillingRecord {
 
 function calculateBillableDaysFromPIVDates(panel: Panel, year: number, month: number): number {
   const actualDaysInBillingMonth = getDaysInActualMonthFns(new Date(Date.UTC(year, month - 1, 1)));
-  // const monthStartDateObj = new Date(Date.UTC(year, month - 1, 1)); // Not strictly needed with current day iteration
-  // const monthEndDateObj = new Date(Date.UTC(year, month - 1, actualDaysInBillingMonth)); // Not strictly needed
-
+  
   let truePanelInstallDate: Date | null = null;
 
   if (panel.piv_instalado && isValidDateString(panel.piv_instalado)) {
@@ -72,13 +70,13 @@ function calculateBillableDaysFromPIVDates(panel: Panel, year: number, month: nu
       isEffectivelyInstalledToday = true;
 
       if (desinstallDateObj && desinstallDateObj >= truePanelInstallDate) {
-        if (currentDate > desinstallDateObj) { // Panel no activo DESPUÉS del día de desinstalación
+        if (currentDate > desinstallDateObj) { 
           isEffectivelyInstalledToday = false;
         }
       }
 
       if (!isEffectivelyInstalledToday && reinstallDateObj && desinstallDateObj && reinstallDateObj > desinstallDateObj) {
-         if (currentDate >= reinstallDateObj) { // Activo de nuevo desde el día de reinstalación
+         if (currentDate >= reinstallDateObj) { 
           isEffectivelyInstalledToday = true;
         }
       }
@@ -116,48 +114,46 @@ export function calculateMonthlyBillingForPanel(
   allPanels: Panel[]
 ): BillingRecord {
   const panel = allPanels.find(p => p.codigo_parada === panelId);
-  const actualDaysInBillingMonth = getDaysInActualMonthFns(new Date(Date.UTC(year, month - 1, 1)));
+  const naturalDaysInMonth = getDaysInActualMonthFns(new Date(Date.UTC(year, month - 1, 1)));
 
   if (!panel) {
     // console.warn(`[calculateMonthlyBillingForPanel] Panel con ID ${panelId} no encontrado.`);
-    return { panelId, year, month, billedDays: 0, totalDaysInMonth: actualDaysInBillingMonth, amount: 0, panelDetails: undefined };
+    return { panelId, year, month, billedDays: 0, totalDaysInMonth: naturalDaysInMonth, amount: 0, panelDetails: undefined };
   }
 
-  // 1. Calculate actual activity days first
   const actualActivityDays = calculateBillableDaysFromPIVDates(panel, year, month);
 
-  // 2. Determine days for billing and display
-  let daysForBillingAndDisplay: number;
-  if (actualActivityDays >= actualDaysInBillingMonth) { // Panel was active for the whole natural month
-    daysForBillingAndDisplay = DAYS_IN_STANDARD_MONTH; // Cap billed days at 30
+  let daysForBillingNumerator: number;      // This will be the numerator for "Días Fact."
+  let daysForBillingDenominator: number = naturalDaysInMonth; // Default to natural days for the denominator
+
+  if (actualActivityDays >= naturalDaysInMonth) { // Panel was active for the whole natural month
+    daysForBillingNumerator = DAYS_IN_STANDARD_MONTH;    // Numerator is 30
+    daysForBillingDenominator = DAYS_IN_STANDARD_MONTH;   // Denominator is also 30 for display
   } else {
-    daysForBillingAndDisplay = actualActivityDays; // Partial month, use actual activity days
+    daysForBillingNumerator = actualActivityDays;         // Partial month, use actual activity days for numerator
+                                                        // Denominator (daysForBillingDenominator) remains naturalDaysInMonth
   }
 
-  // 3. Determine the base amount for calculation
   const finalBaseAmount = (panel.importe_mensual && panel.importe_mensual > 0)
                               ? panel.importe_mensual
                               : MAX_MONTHLY_RATE;
 
-  // 4. Calculate the monetary amount
-  // Amount is 0 if base rate is 0 or no billable days, otherwise calculate proportionally.
-  const amount = (finalBaseAmount <= 0 || daysForBillingAndDisplay === 0)
+  const amount = (finalBaseAmount <= 0 || daysForBillingNumerator === 0)
                   ? 0
                   : calculateProportionalBilling(
-                      daysForBillingAndDisplay,
+                      daysForBillingNumerator, // Use the numerator for calculation
                       finalBaseAmount,
-                      DAYS_IN_STANDARD_MONTH
+                      DAYS_IN_STANDARD_MONTH   // Daily rate denominator is always 30
                     );
 
-  // console.log(`[BillingCalc ${panel.codigo_parada}] Para ${year}-${String(month).padStart(2,'0')}: ActDays=${actualActivityDays}, NatDaysInM=${actualDaysInBillingMonth}, DaysForBill=${daysForBillingAndDisplay}, BaseAmt=${finalBaseAmount.toFixed(2)}, Amount=${amount.toFixed(2)}`);
-
-  // 5. Return the record, ensuring billedDays is always daysForBillingAndDisplay
+  // console.log(`[BillingCalc ${panel.codigo_parada}] Para ${year}-${String(month).padStart(2,'0')}: ActDays=${actualActivityDays}, NatDaysInM=${naturalDaysInMonth}, Num=${daysForBillingNumerator}, Denom=${daysForBillingDenominator}, BaseAmt=${finalBaseAmount.toFixed(2)}, Amount=${amount.toFixed(2)}`);
+  
   return {
     panelId,
     year,
     month,
-    billedDays: daysForBillingAndDisplay,
-    totalDaysInMonth: actualDaysInBillingMonth,
+    billedDays: daysForBillingNumerator,
+    totalDaysInMonth: daysForBillingDenominator,
     amount,
     panelDetails: panel,
   };
@@ -220,7 +216,7 @@ export function getPanelHistoryForBillingMonth(
       pivDerivedStatusToday = 'installed';
 
       if (pivDesinstallForHist && pivDesinstallForHist >= pivInitialInstallForHist) {
-        if (currentDate > pivDesinstallForHist) { // Not billable AFTER desinstall day
+        if (currentDate > pivDesinstallForHist) {
           isBillableTodayBasedOnPIV = false;
           pivDerivedStatusToday = 'removed';
         }
@@ -236,8 +232,8 @@ export function getPanelHistoryForBillingMonth(
       pivDerivedStatusToday = 'pending_installation';
       isBillableTodayBasedOnPIV = false;
     } else {
-      pivDerivedStatusToday = panel.status || 'unknown';
-      isBillableTodayBasedOnPIV = false;
+      pivDerivedStatusToday = panel.status || 'unknown'; // Default to panel's current status if no PIV history applies
+      isBillableTodayBasedOnPIV = false; // Not billable if no PIV install date before or on current
     }
 
     let finalStatusForDisplay = pivDerivedStatusToday;
@@ -245,7 +241,7 @@ export function getPanelHistoryForBillingMonth(
 
     if (eventsOnThisDay.length > 0) {
       const latestEventToday = eventsOnThisDay[eventsOnThisDay.length - 1];
-      finalStatusForDisplay = latestEventToday.newStatus;
+      finalStatusForDisplay = latestEventToday.newStatus; // Event status overrides PIV-derived status for display
       eventNotesForDay = eventsOnThisDay.map(e => e.notes || `${statusTranslations[e.oldStatus || 'unknown'] || 'Inicial'} -> ${statusTranslations[e.newStatus]}`).join('; ');
     } else {
       eventNotesForDay = statusTranslations[finalStatusForDisplay] || finalStatusForDisplay;
@@ -257,7 +253,7 @@ export function getPanelHistoryForBillingMonth(
     dailyHistory.push({
       date: currentDateStr,
       status: finalStatusForDisplay,
-      isBillable: isBillableTodayBasedOnPIV,
+      isBillable: isBillableTodayBasedOnPIV, // Billable status is strictly from PIV dates
       eventNotes: eventNotesForDay,
     });
   }
