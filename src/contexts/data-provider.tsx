@@ -52,11 +52,14 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 const convertExcelSerialToDate = (serial: number): Date | undefined => {
   if (typeof serial !== 'number' || serial <= 0) return undefined;
   try {
+    // XLSX.SSF.parse_date_code returns an object like {y,m,d,H,M,S,...}
+    // m is 1-based for month
     const excelDate = XLSX.SSF.parse_date_code(serial);
     if (excelDate && typeof excelDate.y === 'number' && typeof excelDate.m === 'number' && typeof excelDate.d === 'number') {
         const hours = typeof excelDate.H === 'number' ? excelDate.H : 0;
         const minutes = typeof excelDate.M === 'number' ? excelDate.M : 0;
         const seconds = typeof excelDate.S === 'number' ? excelDate.S : 0;
+        // Construct date in UTC to avoid timezone shifts if times are 00:00:00
         const date = new Date(Date.UTC(excelDate.y, excelDate.m - 1, excelDate.d, hours, minutes, seconds));
         return isValid(date) ? date : undefined;
     }
@@ -80,26 +83,36 @@ const convertToYYYYMMDD = (dateInput: any): string | undefined => {
     if (isValid(dateInput)) {
       date = dateInput;
     } else {
+      // console.warn(`[convertToYYYYMMDD] Invalid Date object received:`, dateInput);
       return undefined;
     }
   } else if (typeof dateInput === 'number') { 
     date = convertExcelSerialToDate(dateInput);
     if (!date || !isValid(date)) {
+      // console.warn(`[convertToYYYYMMDD] Could not convert number to valid date: ${dateInput}`);
       return undefined;
     }
   } else if (typeof dateInput === 'string') {
+    // Try to parse YYYY-MM-DD (possibly with time) first
     let datePartToParse = originalDateInputValue.length > 10 && (originalDateInputValue.includes(' ') || originalDateInputValue.includes('T'))
                          ? originalDateInputValue.substring(0, 10) 
                          : originalDateInputValue;
     
+    // Check if it's already in YYYY-MM-DD format
     if (/^\d{4}-\d{2}-\d{2}$/.test(datePartToParse)) {
-        let parsedDate = parseISO(datePartToParse); 
+        // Double check validity (e.g. 2023-02-30)
+        let parsedDate = parseISO(datePartToParse); // parseISO is good for YYYY-MM-DD
+        // Ensure that what parseISO understood is what we expect
         if (isValid(parsedDate) && formatDateFnsInternal(parsedDate, 'yyyy-MM-dd') === datePartToParse) {
             date = parsedDate;
+        } else {
+           // console.warn(`[convertToYYYYMMDD] String '${datePartToParse}' looks like YYYY-MM-DD but failed validation or parseISO changed it.`);
         }
     }
     
+    // If not parsed yet, try DD-MM-YY or DD/MM/YY etc.
     if (!date) { 
+        // Regex for DD{sep}MM{sep}YY or DD{sep}MM{sep}YYYY
         const parts = datePartToParse.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
         if (parts) {
             let day_val, month_val, year_val;
@@ -107,46 +120,56 @@ const convertToYYYYMMDD = (dateInput: any): string | undefined => {
             const part2 = parseInt(parts[2], 10);
             let part3 = parseInt(parts[3], 10);
 
-            if (parts[3].length === 2) { 
-                year_val = part3 < 70 ? 2000 + part3 : 1900 + part3; 
-            } else if (parts[3].length === 4) {
+            if (parts[3].length === 2) { // YY format
+                year_val = part3 < 70 ? 2000 + part3 : 1900 + part3; // Heuristic for 2-digit years
+            } else if (parts[3].length === 4) { // YYYY format
                 year_val = part3;
             } else {
-                return undefined;
+                // console.warn(`[convertToYYYYMMDD] Year part '${parts[3]}' from '${datePartToParse}' is not 2 or 4 digits.`);
+                return undefined; // Invalid year length
             }
             
-            if (part1 > 12 && part2 <=12) { day_val = part1; month_val = part2; } 
-            else if (part2 > 12 && part1 <=12) { month_val = part1; day_val = part2; } 
-            else { day_val = part1; month_val = part2; } 
+            // Basic heuristic for DD-MM vs MM-DD: if one part is > 12, it's likely the day
+            if (part1 > 12 && part2 <=12) { day_val = part1; month_val = part2; } // DD-MM-YYYY
+            else if (part2 > 12 && part1 <=12) { month_val = part1; day_val = part2; } // MM-DD-YYYY (less common in ES)
+            else { day_val = part1; month_val = part2; } // Ambiguous, assume DD-MM-YYYY as per typical ES locale
 
             if (year_val && month_val && day_val && month_val >=1 && month_val <=12 && day_val >=1 && day_val <=31) {
                 const tempDate = new Date(Date.UTC(year_val, month_val - 1, day_val));
                  if (isValid(tempDate) && tempDate.getUTCFullYear() === year_val && tempDate.getUTCMonth() === month_val -1 && tempDate.getUTCDate() === day_val) {
                     date = tempDate;
                 } else {
+                    // console.warn(`[convertToYYYYMMDD] Date components for '${datePartToParse}' (Y:${year_val} M:${month_val} D:${day_val}) formed an invalid Date (e.g. Feb 30).`);
                     return undefined;
                 }
             } else {
+                // console.warn(`[convertToYYYYMMDD] Invalid date components for '${datePartToParse}' (Y:${year_val} M:${month_val} D:${day_val}).`);
                 return undefined;
             }
         } else {
-            return undefined;
+          // console.warn(`[convertToYYYYMMDD] String '${dateInput}' did not match expected date formats.`);
+          return undefined; // Did not match any known string format
         }
     }
   } else {
-    return undefined;
+    // console.warn(`[convertToYYYYMMDD] Unhandled dateInput type: ${typeof dateInput}`);
+    return undefined; // Not a Date, number, or string
   }
 
+  // Final check and format
   if (!date || !isValid(date)) {
+    // console.warn(`[convertToYYYYMMDD] Date is invalid before formatting for input:`, dateInput);
     return undefined;
   }
 
   try {
+    // Format to YYYY-MM-DD. Use UTC methods to avoid timezone shift affecting the date components.
     const finalYear = date.getUTCFullYear();
     const finalMonthStr = (date.getUTCMonth() + 1).toString().padStart(2, '0');
     const finalDayStr = date.getUTCDate().toString().padStart(2, '0');
     return `${finalYear}-${finalMonthStr}-${finalDayStr}`;
   } catch (error) {
+    // console.error(`[convertToYYYYMMDD] Error formatting date to string for input:`, dateInput, error);
     return undefined;
   }
 };
@@ -171,7 +194,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const panelPivInstaladoDate = parseAndValidateDateFromBillingUtils(panelToUpdate.piv_instalado);
 
       if (panelPivInstaladoDate) {
-        newLastStatusUpdate = panelToUpdate.piv_instalado; // piv_instalado is string
+        newLastStatusUpdate = panelToUpdate.piv_instalado;
         if (panelPivInstaladoDate > today) {
           newStatus = 'pending_installation';
         } else {
@@ -189,6 +212,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       if (panelPivInstaladoDate) { 
           for (const event of eventsToProcess) {
+            // Only apply events that are on or after the panel's installation date
             if (event.fechaObj! >= panelPivInstaladoDate) { 
                 if (event.tipo === "DESINSTALACION") {
                     newStatus = 'removed';
@@ -199,6 +223,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             }
           }
       }
+
 
       if (panelToUpdate.status !== newStatus || panelToUpdate.lastStatusUpdate !== newLastStatusUpdate) {
         const updatedPanels = [...prevPanels];
@@ -228,13 +253,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const panelPivInstaladoDate = parseAndValidateDateFromBillingUtils(panel.piv_instalado);
 
     if (panelPivInstaladoDate) {
-        initialLastStatusUpdate = panel.piv_instalado; // piv_instalado is string
+        initialLastStatusUpdate = panel.piv_instalado; 
         if (panelPivInstaladoDate > today) {
             initialStatus = 'pending_installation';
         } else {
             initialStatus = 'installed';
         }
-    } else {
+    } else { // No valid piv_instalado date
         initialStatus = 'unknown';
         initialLastStatusUpdate = panel.fecha_importacion || format(today, 'yyyy-MM-dd');
     }
@@ -246,9 +271,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     };
 
     setPanels(prev => [...prev, newPanelWithStatus].sort((a, b) => a.codigo_parada.localeCompare(b.codigo_parada)));
-    refreshPanelStatus(newPanelWithStatus.codigo_parada); // Asegurar que el estado se refine con eventos si ya existen
+    // No need to call refreshPanelStatus here if events are not yet associated
+    // Or, if addPanel implies events could exist, refreshPanelStatus(newPanelWithStatus.codigo_parada);
     return { success: true, message: `Panel ${panel.codigo_parada} añadido con estado inicial ${initialStatus}.` };
-  }, [panels, refreshPanelStatus]);
+  }, [panels]); // Removed refreshPanelStatus from dependencies as it's called selectively
 
   const updatePanel = useCallback(async (panelId: string, updates: Partial<Panel>): Promise<DataOperationResult> => {
     let panelExists = false;
@@ -417,16 +443,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           const piv_instalado_valor_mapeado = row['PIV Instalado'];
           const piv_desinstalado_valor_mapeado = row['PIV Desinstalado'];
           const piv_reinstalado_valor_mapeado = row['PIV Reinstalado'];
-          const ultima_instalacion_reinstalacion_valor_mapeado = row['Última instalación/reinstalación'];
-
-
+          
           const piv_instalado_converted = convertToYYYYMMDD(piv_instalado_valor_mapeado);
           const piv_desinstalado_converted = convertToYYYYMMDD(piv_desinstalado_valor_mapeado);
           const piv_reinstalado_converted = convertToYYYYMMDD(piv_reinstalado_valor_mapeado);
-          const ultima_instalacion_reinstalacion_converted = convertToYYYYMMDD(ultima_instalacion_reinstalacion_valor_mapeado);
           
           if (!piv_instalado_converted) {
-             errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada}): 'PIV Instalado' ("${piv_instalado_valor_mapeado}") es inválido o faltante. Este campo es obligatorio. Panel omitido.`);
+             errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada}): 'PIV Instalado' ("${piv_instalado_valor_mapeado}") es inválido o faltante. Este campo es obligatorio para la facturación y el estado. Panel omitido.`);
              skippedCount++;
              return; 
           }
@@ -454,19 +477,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             address: String(row['Direccion CCE (Clear Channel)'] || '').trim(),
             notes: String(row['Notas'] || '').trim(),
             
-            status: 'unknown', // Se establecerá por refreshPanelStatus
-            lastStatusUpdate: null, // Se establecerá por refreshPanelStatus
+            status: 'unknown', 
+            lastStatusUpdate: null, 
             
             marquesina: String(row['Marquesina'] || '').trim(),
             cce: String(row['CCE'] || '').trim(),
-            ultima_instalacion_o_reinstalacion: ultima_instalacion_reinstalacion_converted,
+            ultima_instalacion_o_reinstalacion: convertToYYYYMMDD(row['Última instalación/reinstalación']),
             vigencia: String(row['Vigencia'] || '').trim(),
 
             fecha_importacion: todayFormatted,
             importado_por: "currentUser", 
             importe_mensual_original: String(importe_mensual_valor_mapeado || ''),
-            installationDate: piv_instalado_converted || ultima_instalacion_reinstalacion_converted,
-            // latitude, longitude, etc. se añadirían aquí si estuvieran en providerToExcelMap
+            installationDate: piv_instalado_converted || convertToYYYYMMDD(row['Última instalación/reinstalación']),
           };
           
             billingStats.totalPanels++;
@@ -481,7 +503,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           
             newPanelsToImport.push(newPanel);
             importedPanelIdsInFile.add(codigo_parada);
-            panelIdsToRefresh.add(codigo_parada);
           
           if (piv_desinstalado_converted) {
             newEventsToCreate.push({
@@ -489,6 +510,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               panelId: codigo_parada,
               tipo: "DESINSTALACION",
               fecha: piv_desinstalado_converted,
+              notes: "Evento creado desde piv_desinstalado en importación inicial"
             });
           }
           if (piv_reinstalado_converted) {
@@ -501,6 +523,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 panelId: codigo_parada,
                 tipo: "REINSTALACION",
                 fecha: piv_reinstalado_converted,
+                notes: "Evento creado desde piv_reinstalado en importación inicial"
               });
             } else if (reinstallDateObj && desinstallDateObj && reinstallDateObj < desinstallDateObj) {
                 errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada}): 'PIV Reinstalado' ("${piv_reinstalado_valor_mapeado}") es anterior a 'PIV Desinstalado'. Evento de reinstalación omitido o podría necesitar revisión manual.`);
@@ -520,6 +543,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             }));
         }
         
+        newPanelsToImport.forEach(panel => panelIdsToRefresh.add(panel.codigo_parada));
         panelIdsToRefresh.forEach(id => refreshPanelStatus(id));
         
     } else { // fileType === 'monthly'
@@ -589,6 +613,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 }
                 panelEvent.tipo = tipoEventoDeterminado;
             }
+            // Remove oldStatus and newStatus as they are not part of the final PanelEvent interface used for backend logic
             delete panelEvent.oldStatus;
             delete panelEvent.newStatus;
             
@@ -607,10 +632,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         panelIdsToRefresh.forEach(id => refreshPanelStatus(id));
     }
 
-    const opSuccess = addedCount > 0 || (fileType === 'initial' && newPanelsToImport.length > 0 && skippedCount < processedCountFromFile);
+    const opSuccess = addedCount > 0 || (fileType === 'initial' && initialFilteredData.length > 0 && skippedCount < processedCountFromFile && addedCount > 0);
     let opMessage = `Registros procesados desde archivo: ${processedCountFromFile}. `;
     if (fileType === 'initial') {
-        opMessage += `Paneles ${newPanelsToImport.length > addedCount ? 'intentados' : 'añadidos'}: ${addedCount}. `;
+        opMessage += `Paneles ${initialFilteredData.length > addedCount ? 'intentados según archivo' : 'añadidos'}: ${addedCount}. `;
     } else {
         opMessage += `Eventos añadidos: ${addedCount}. `;
     }
@@ -625,7 +650,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
      else if (processedCountFromFile > 0 && addedCount === 0) {
         opMessage = `No se ${fileType === 'initial' ? 'importaron paneles nuevos válidos' : 'importaron eventos nuevos válidos'}. Verifique el archivo y los logs. ${opMessage}`;
-    } else {
+    } else { // processedCountFromFile === 0
         opMessage = `No se encontraron datos válidos para importar.`;
     }
     
@@ -704,7 +729,8 @@ const eventStatusValueMapping: { [key: string]: PanelStatus } = {
   'pendiente': 'pending_installation', 
 };
 
-const isValidDateString = (dateStr: any): dateStr is string => {
+// Helper function not directly used by DataProvider but useful for external validation understanding
+const isValidDateStringFormat = (dateStr: any): dateStr is string => {
   if (typeof dateStr !== 'string' || !dateStr.trim()) return false;
   
   const datePart = dateStr.trim().substring(0, 10); 
@@ -715,3 +741,4 @@ const isValidDateString = (dateStr: any): dateStr is string => {
   const dateObj = parseISO(datePart);
   return isValid(dateObj) && formatDateFnsInternal(dateObj, 'yyyy-MM-dd') === datePart;
 };
+
