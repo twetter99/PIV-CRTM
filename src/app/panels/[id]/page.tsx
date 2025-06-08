@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Edit2, PlusCircle, Trash2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import type { Panel, PanelEvent } from '@/types/piv';
+import type { Panel, PanelEvent, PanelStatus } from '@/types/piv';
 import PanelForm from '@/components/panels/panel-form';
 import EventForm from '@/components/panels/event-form';
 import { Badge } from '@/components/ui/badge';
@@ -127,7 +127,10 @@ export default function PanelDetailPage() {
     );
   }
   
-  const formatStatus = (status: string) => {
+  const formatStatus = (status: string | null | undefined): string => {
+    if (status === null || status === undefined) {
+      return 'Desconocido'; // Valor por defecto si el status es null o undefined
+    }
     const statusMap: { [key: string]: string } = {
         'installed': 'Instalado',
         'removed': 'Eliminado',
@@ -136,7 +139,8 @@ export default function PanelDetailPage() {
         'pending_removal': 'Pendiente Eliminación',
         'unknown': 'Desconocido'
     };
-    return statusMap[status] || status.replace(/_/g, ' ');
+    // Devuelve el valor del mapa si existe, de lo contrario, formatea la cadena
+    return statusMap[status as PanelStatus] || status.toString().replace(/_/g, ' ');
   };
 
   return (
