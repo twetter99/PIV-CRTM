@@ -4,9 +4,9 @@
 import type { Panel, PanelEvent, PanelStatus } from '@/types/piv';
 import { ALL_PANEL_STATUSES } from '@/types/piv';
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import { format, parseISO, isValid, getDaysInMonth as getDaysInActualMonthFnsDateFns, format as formatDateFnsInternal } from 'date-fns'; // Renamed to avoid conflict
-import * as XLSX from 'xlsx'; // Importar XLSX para SSF
-import { parseAndValidateDate as parseAndValidateDateFromBillingUtils } from '@/lib/billing-utils'; // Renombrar para claridad
+import { format, parseISO, isValid, getDaysInMonth as getDaysInActualMonthFnsDateFns, format as formatDateFnsInternal } from 'date-fns';
+import * as XLSX from 'xlsx';
+import { parseAndValidateDate as parseAndValidateDateFromBillingUtils } from '@/lib/billing-utils';
 
 interface DataOperationResult {
   success: boolean;
@@ -52,19 +52,14 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 const convertExcelSerialToDate = (serial: number): Date | undefined => {
     if (typeof serial !== 'number' || serial <= 0) return undefined;
     try {
-        // XLSX.SSF.parse_date_code es más robusto para convertir números de serie de Excel.
-        // Devuelve un objeto con y, m, d, etc. (año, mes, día)
         const excelDate = XLSX.SSF.parse_date_code(serial);
         if (excelDate && typeof excelDate.y === 'number' && typeof excelDate.m === 'number' && typeof excelDate.d === 'number') {
-            // El mes (m) en parse_date_code es 1-indexado. El constructor de Date JS espera 0-indexado para mes.
             const date = new Date(Date.UTC(excelDate.y, excelDate.m - 1, excelDate.d, excelDate.H || 0, excelDate.M || 0, excelDate.S || 0));
             return isValid(date) ? date : undefined;
         }
     } catch (e) {
-        // console.warn(`Error converting Excel serial date ${serial}:`, e);
         return undefined;
     }
-    // console.warn(`Could not parse Excel serial date ${serial} with XLSX.SSF.parse_date_code.`);
     return undefined;
 };
 
@@ -77,37 +72,28 @@ const convertToYYYYMMDD = (dateInput: any): string | undefined => {
   let date: Date | undefined;
   let originalDateInputValue = String(dateInput).trim(); 
 
-  if (dateInput instanceof Date) { // Si ya es un objeto Date (gracias a cellDates:true)
+  if (dateInput instanceof Date) { 
     if (isValid(dateInput)) {
       date = dateInput;
     } else {
-        // console.warn(`convertToYYYYMMDD: Invalid Date object received: ${dateInput}`);
         return undefined;
     }
-  } else if (typeof dateInput === 'number') { // Si es un número (posiblemente serie Excel si cellDates:false o falló)
+  } else if (typeof dateInput === 'number') { 
     date = convertExcelSerialToDate(dateInput);
     if (!date || !isValid(date)) {
-        // console.warn(`convertToYYYYMMDD: Invalid Excel serial date: ${dateInput}`);
         return undefined;
     }
   } else if (typeof dateInput === 'string') {
-    let datePartToParse = originalDateInputValue;
-    // Si es YYYY-MM-DD HH:MM:SS (o similar), tomar solo la parte de fecha
-    if (datePartToParse.length > 10 && datePartToParse.charAt(4) === '-' && datePartToParse.charAt(7) === '-') {
-        datePartToParse = datePartToParse.substring(0, 10);
-    }
+    let datePartToParse = originalDateInputValue.length > 10 && originalDateInputValue.charAt(4) === '-' && originalDateInputValue.charAt(7) === '-' ? originalDateInputValue.substring(0, 10) : originalDateInputValue;
     
-    // Intentar parsear como YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(datePartToParse)) {
         let parsedDate = parseISO(datePartToParse); 
         if (isValid(parsedDate) && formatDateFnsInternal(parsedDate, 'yyyy-MM-dd') === datePartToParse) {
             date = parsedDate;
-        } else {
-            // console.warn(`convertToYYYYMMDD: Invalid YYYY-MM-DD string: ${datePartToParse}`);
         }
     }
     
-    if (!date) { // Si no era YYYY-MM-DD o falló, intentar DD-MM-YY o DD/MM/YY o DD.MM.YY etc.
+    if (!date) { 
         const parts = datePartToParse.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
         if (parts) {
             let day_val, month_val, year_val;
@@ -116,17 +102,16 @@ const convertToYYYYMMDD = (dateInput: any): string | undefined => {
             let part3 = parseInt(parts[3], 10);
 
             if (parts[3].length === 2) { 
-                year_val = part3 < 70 ? 2000 + part3 : 1900 + part3; // Asumir siglo
+                year_val = part3 < 70 ? 2000 + part3 : 1900 + part3;
             } else if (parts[3].length === 4) {
                 year_val = part3;
             } else {
                 return undefined;
             }
             
-            // Heurística para DD/MM vs MM/DD. Si no es ambiguo, usarlo. Si es ambiguo, asumir DD/MM.
-            if (part1 > 12 && part2 <=12) { day_val = part1; month_val = part2; } // DD/MM
-            else if (part2 > 12 && part1 <=12) { month_val = part1; day_val = part2; } // MM/DD
-            else { day_val = part1; month_val = part2; } // Ambiguo o ambos <=12, asumir DD/MM
+            if (part1 > 12 && part2 <=12) { day_val = part1; month_val = part2; } 
+            else if (part2 > 12 && part1 <=12) { month_val = part1; day_val = part2; } 
+            else { day_val = part1; month_val = part2; } 
 
             if (year_val && month_val && day_val && month_val >=1 && month_val <=12 && day_val >=1 && day_val <=31) {
                 const tempDate = new Date(Date.UTC(year_val, month_val - 1, day_val));
@@ -143,7 +128,6 @@ const convertToYYYYMMDD = (dateInput: any): string | undefined => {
         }
     }
   } else {
-    // console.warn(`convertToYYYYMMDD: Tipo de entrada de fecha no soportado: ${typeof dateInput}`);
     return undefined;
   }
 
@@ -160,44 +144,58 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [panels, setPanels] = useState<Panel[]>([]);
   const [panelEvents, setPanelEvents] = useState<PanelEvent[]>([]);
 
-  const refreshPanelStatus = useCallback((panelId: string, eventsForPanel: PanelEvent[]) => {
+  const refreshPanelStatus = useCallback((panelId: string, currentEventsForPanel?: PanelEvent[]) => {
     setPanels(prevPanels => {
       const panelIndex = prevPanels.findIndex(p => p.codigo_parada === panelId);
       if (panelIndex === -1) return prevPanels;
 
       const panelToUpdate = { ...prevPanels[panelIndex] };
       
-      const panelPivInstaladoDate = parseAndValidateDateFromBillingUtils(panelToUpdate.piv_instalado);
-      let newStatus: PanelStatus = panelPivInstaladoDate ? 'pending_installation' : 'unknown';
-      let newLastStatusUpdate: string | null = panelToUpdate.piv_instalado || null;
+      let newStatus: PanelStatus = 'unknown';
+      let newLastStatusUpdate: string | null = null;
+      const today = new Date(); // Date object for today, for comparisons
+      today.setUTCHours(0,0,0,0); // Normalize today to UTC midnight for date-only comparisons
 
-      if (panelPivInstaladoDate && new Date() >= panelPivInstaladoDate) {
-        newStatus = 'installed'; 
+
+      const panelPivInstaladoDate = parseAndValidateDateFromBillingUtils(panelToUpdate.piv_instalado);
+
+      if (panelPivInstaladoDate) {
+        newLastStatusUpdate = panelToUpdate.piv_instalado!;
+        if (panelPivInstaladoDate > today) {
+          newStatus = 'pending_installation';
+        } else {
+          newStatus = 'installed'; // Default to installed if install date is past/present
+        }
+      } else {
+        newStatus = 'unknown';
+        newLastStatusUpdate = null;
       }
       
-      const sortedEvents = [...eventsForPanel]
-        .filter(e => parseAndValidateDateFromBillingUtils(e.fecha))
-        .sort((a, b) => {
+      const eventsToConsider = (currentEventsForPanel || panelEvents.filter(e => e.panelId === panelId))
+        .filter(e => {
+            const eventDate = parseAndValidateDateFromBillingUtils(e.fecha);
+            return eventDate && eventDate <= today; // Only consider past or present events
+        })
+        .sort((a, b) => { // Sort by date ascending, then by a deterministic order if dates are same (e.g. ID)
             const dateA = parseAndValidateDateFromBillingUtils(a.fecha)!.getTime();
             const dateB = parseAndValidateDateFromBillingUtils(b.fecha)!.getTime();
-            return dateB - dateA; 
+            if (dateA !== dateB) return dateA - dateB;
+            return a.id.localeCompare(b.id); 
         });
 
-      if (sortedEvents.length > 0) {
-        const latestEvent = sortedEvents[0];
-        const latestEventDate = parseAndValidateDateFromBillingUtils(latestEvent.fecha);
-
-        if (latestEventDate) {
-            newLastStatusUpdate = latestEvent.fecha;
-            if (latestEvent.tipo === "DESINSTALACION") {
-                newStatus = 'removed';
-            } else if (latestEvent.tipo === "REINSTALACION") {
-                newStatus = 'installed';
+      if (panelPivInstaladoDate) { // Only apply events if there's an install date
+          for (const event of eventsToConsider) {
+            // Apply event only if it's on or after the initial installation
+            const eventDate = parseAndValidateDateFromBillingUtils(event.fecha)!; // Already filtered for valid
+            if (eventDate >= panelPivInstaladoDate) {
+                if (event.tipo === "DESINSTALACION") {
+                    newStatus = 'removed';
+                } else if (event.tipo === "REINSTALACION") {
+                    newStatus = 'installed';
+                }
+                newLastStatusUpdate = event.fecha;
             }
-        }
-      } else if (panelPivInstaladoDate) { 
-         newStatus = (new Date() >= panelPivInstaladoDate) ? 'installed' : 'pending_installation';
-         newLastStatusUpdate = panelToUpdate.piv_instalado;
+          }
       }
 
 
@@ -206,9 +204,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         updatedPanels[panelIndex] = { ...panelToUpdate, status: newStatus, lastStatusUpdate: newLastStatusUpdate };
         return updatedPanels.sort((a, b) => a.codigo_parada.localeCompare(b.codigo_parada));
       }
-      return prevPanels;
+      return prevPanels; // No change, return original state
     });
-  }, []);
+  }, [panelEvents]);
 
 
   useEffect(() => {
@@ -219,20 +217,41 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (panels.some(p => p.codigo_parada === panel.codigo_parada)) {
       return { success: false, message: `El panel con código ${panel.codigo_parada} ya existe.` };
     }
+
+    let initialStatus: PanelStatus = 'unknown';
+    let initialLastStatusUpdate: string | null = null;
+    const today = new Date();
+    today.setUTCHours(0,0,0,0);
+
     const panelPivInstaladoDate = parseAndValidateDateFromBillingUtils(panel.piv_instalado);
+
+    if (panelPivInstaladoDate) {
+        initialLastStatusUpdate = panel.piv_instalado!;
+        if (panelPivInstaladoDate > today) {
+            initialStatus = 'pending_installation';
+        } else {
+            initialStatus = 'installed';
+        }
+    } else {
+        initialLastStatusUpdate = panel.fecha_importacion || format(today, 'yyyy-MM-dd');
+    }
+
     const newPanel = {
         ...panel,
-        status: panelPivInstaladoDate && new Date() >= panelPivInstaladoDate ? 'installed' : (panelPivInstaladoDate ? 'pending_installation' : 'unknown'),
-        lastStatusUpdate: panel.piv_instalado || format(new Date(), 'yyyy-MM-dd')
+        status: initialStatus,
+        lastStatusUpdate: initialLastStatusUpdate
     };
+
     setPanels(prev => [...prev, newPanel].sort((a, b) => a.codigo_parada.localeCompare(b.codigo_parada)));
-    return { success: true, message: `Panel ${panel.codigo_parada} añadido.` };
+    // No need to call refreshPanelStatus here, as we set the initial status directly.
+    // If events related to this new panel could already exist (unlikely for a truly new panel),
+    // then a refresh might be considered, but it's generally for updates.
+    return { success: true, message: `Panel ${panel.codigo_parada} añadido con estado inicial ${initialStatus}.` };
   }, [panels]);
 
   const updatePanel = useCallback(async (panelId: string, updates: Partial<Panel>): Promise<DataOperationResult> => {
     let panelExists = false;
-    let affectedPanelForRefresh: Panel | undefined;
-
+    
     setPanels(prev => {
         const panelIndex = prev.findIndex(p => p.codigo_parada === panelId);
         if (panelIndex === -1) return prev;
@@ -240,18 +259,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         panelExists = true;
         const updatedPanels = [...prev];
         updatedPanels[panelIndex] = { ...updatedPanels[panelIndex], ...updates };
-        affectedPanelForRefresh = updatedPanels[panelIndex];
         return updatedPanels.sort((a, b) => a.codigo_parada.localeCompare(b.codigo_parada));
     });
 
     if (!panelExists) return { success: false, message: `Panel ${panelId} no encontrado.`};
     
-    if (affectedPanelForRefresh) {
-        const currentEventsForPanel = panelEvents.filter(e => e.panelId === panelId);
-        refreshPanelStatus(panelId, currentEventsForPanel);
-    }
+    // After updating panel fields (especially PIV dates), refresh its status
+    refreshPanelStatus(panelId); 
+    
     return { success: true, message: `Panel ${panelId} actualizado.` };
-  }, [panelEvents, refreshPanelStatus]);
+  }, [refreshPanelStatus]);
 
   const getPanelById = useCallback((panelId: string) => {
     return panels.find(p => p.codigo_parada === panelId);
@@ -282,10 +299,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         id: event.id || crypto.randomUUID() 
     } as PanelEvent;
 
-    let latestEventsForPanel: PanelEvent[];
     setPanelEvents(prevEvents => {
       const updatedEvents = [...prevEvents, newEventWithId];
-      latestEventsForPanel = updatedEvents.filter(e => e.panelId === newEventWithId.panelId);
       return updatedEvents.sort((a,b) => { 
         const dateA = a.fecha ? parseISO(a.fecha).getTime() : 0;
         const dateB = b.fecha ? parseISO(b.fecha).getTime() : 0;
@@ -293,11 +308,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
     });
 
-    // @ts-ignore
-    if (latestEventsForPanel) {
-        refreshPanelStatus(newEventWithId.panelId, latestEventsForPanel);
-    }
-
+    refreshPanelStatus(newEventWithId.panelId);
+    
     return { success: true, message: `Evento para ${newEventWithId.panelId} añadido.` };
   }, [refreshPanelStatus]);
 
@@ -305,7 +317,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     let affectedPanelId: string | undefined;
     let originalPanelIdForRefresh: string | undefined;
     let eventExists = false;
-    let latestEventsList: PanelEvent[] = [];
 
     if (updates.fecha) {
         const updatedDate = convertToYYYYMMDD(updates.fecha);
@@ -316,11 +327,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         return { success: false, message: "Tipo de evento actualizado inválido." };
     }
 
-
     setPanelEvents(prevEvents => {
       const eventIndex = prevEvents.findIndex(e => e.id === eventId);
       if (eventIndex === -1) {
-        latestEventsList = [...prevEvents];
         return prevEvents;
       }
       eventExists = true;
@@ -330,7 +339,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       originalPanelIdForRefresh = originalEvent.panelId;
       affectedPanelId = updates.panelId || originalEvent.panelId; 
       updatedEvents[eventIndex] = { ...originalEvent, ...updates } as PanelEvent;
-      latestEventsList = updatedEvents;
       return updatedEvents.sort((a,b) => {
         const dateA = a.fecha ? parseISO(a.fecha).getTime() : 0;
         const dateB = b.fecha ? parseISO(b.fecha).getTime() : 0;
@@ -341,12 +349,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (!eventExists) return { success: false, message: `Evento con ID ${eventId} no encontrado.`};
 
     if (originalPanelIdForRefresh && originalPanelIdForRefresh !== affectedPanelId) {
-      const eventsForOldPanel = latestEventsList.filter(e => e.panelId === originalPanelIdForRefresh);
-      refreshPanelStatus(originalPanelIdForRefresh, eventsForOldPanel);
+      refreshPanelStatus(originalPanelIdForRefresh);
     }
     if (affectedPanelId) {
-      const eventsForAffectedPanel = latestEventsList.filter(e => e.panelId === affectedPanelId);
-      refreshPanelStatus(affectedPanelId, eventsForAffectedPanel);
+      refreshPanelStatus(affectedPanelId);
     }
     return { success: true, message: `Evento ${eventId} actualizado.` };
   }, [refreshPanelStatus]);
@@ -356,8 +362,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const errors: string[] = [];
     let addedCount = 0;
     let skippedCount = 0;
-    // let firstPanelMappedForDebug: Panel | null = null; 
-
+    
     const billingStats: BillingStats = { 
         totalPanels: 0, 
         panelesConImporte: 0, 
@@ -389,13 +394,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const importedPanelIdsInFile = new Set<string>();
         const currentPanelIdsSet = new Set(panels.map(p => p.codigo_parada));
         
-        // console.log("Primeras 2 filas de jsonData (mappedData ANTES de procesar en DataProvider):", jsonData.slice(0,2));
-
-
         initialFilteredData.forEach((row, index) => {
-          const rowIndexForError = index + 6; // Asumiendo cabeceras en fila 5
+          const rowIndexForError = index + 6; 
 
-          // Utilizar las claves MAPEADAS que vienen de mapAndEnsureColumns
           const codigo_parada_raw = row['Código parada']; 
           const codigo_parada = codigo_parada_raw !== undefined && codigo_parada_raw !== null ? String(codigo_parada_raw).trim() : "";
 
@@ -411,7 +412,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             return;
           }
           
-          // Acceder a las fechas usando las claves MAPEADAS
           const piv_instalado_valor_mapeado = row['PIV Instalado'];
           const piv_desinstalado_valor_mapeado = row['PIV Desinstalado'];
           const piv_reinstalado_valor_mapeado = row['PIV Reinstalado'];
@@ -426,13 +426,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           if (!piv_instalado_converted) {
             if (piv_instalado_valor_mapeado && String(piv_instalado_valor_mapeado).trim() !== '') {
                  errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada}): 'PIV Instalado' ("${piv_instalado_valor_mapeado}") es inválida. Se asignará Nulo. El panel no será facturable.`);
-            } else {
-                 // console.warn(`Panel ${codigo_parada} no tiene fecha de instalación ('PIV Instalado') válida. No será facturable.`);
             }
           }
           
-          const importe_mensual_valor_mapeado = row['Importe Mensual']; // Usar clave mapeada
-          let importe_mensual_final = 37.7; // Valor por defecto
+          const importe_mensual_valor_mapeado = row['Importe Mensual'];
+          let importe_mensual_final = 37.7; 
           if (importe_mensual_valor_mapeado !== null && importe_mensual_valor_mapeado !== undefined && String(importe_mensual_valor_mapeado).trim() !== '') {
               const parsedAmount = parseFloat(String(importe_mensual_valor_mapeado).replace(',', '.'));
               if (!isNaN(parsedAmount) && parsedAmount >= 0) {
@@ -441,7 +439,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                   errors.push(`Fila ${rowIndexForError} (Panel ${codigo_parada}): 'Importe Mensual' ("${importe_mensual_valor_mapeado}") es inválido. Usando por defecto ${importe_mensual_final}.`);
               }
           }
-
 
           const newPanel: Panel = {
             codigo_parada: codigo_parada,
@@ -463,20 +460,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             client: String(row['Empresas concesionarias'] || '').trim(),
             address: String(row['Direccion CCE (Clear Channel)'] || '').trim(),
             
-            status: piv_instalado_converted ? 'pending_installation' : 'unknown', 
-            lastStatusUpdate: piv_instalado_converted, 
+            status: 'unknown', // Se establecerá por addPanel -> refreshPanelStatus
+            lastStatusUpdate: null, 
             fecha_importacion: new Date().toISOString().split('T')[0],
             importado_por: "currentUser", 
             importe_mensual_original: String(importe_mensual_valor_mapeado || ''),
             installationDate: piv_instalado_converted || ultima_instalacion_converted,
             
-            // Mapear otros campos si existen en 'row' con sus claves mapeadas
-            marquesina: String(row['Marquesina'] || row['marquesina'] || '').trim(), // Asumiendo posible clave 'Marquesina'
-            cce: String(row['CCE'] || row['Cce'] || row['cce'] || '').trim(), // Asumiendo posibles claves 'CCE' o 'cce'
-            notes: String(row['Notas'] || row['notas'] || '').trim(), // Asumiendo posible clave 'Notas'
+            marquesina: String(row['Marquesina'] || row['marquesina'] || '').trim(), 
+            cce: String(row['CCE'] || row['Cce'] || row['cce'] || '').trim(), 
+            notes: String(row['Notas'] || row['notas'] || '').trim(), 
           };
           
-          // Lógica de billingStats (actualizar con importe_mensual_final)
             billingStats.totalPanels++;
             if (importe_mensual_final > 0) {
                 billingStats.panelesConImporte++;
@@ -486,14 +481,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             } else {
                 billingStats.panelesSinImporte++;
             }
-            // ... (manejo de errores de formato importe si es necesario) ...
           
           newPanelsToImport.push(newPanel);
           importedPanelIdsInFile.add(codigo_parada);
-          addedCount++;
-          // if (!firstPanelMappedForDebug) {
-          //   firstPanelMappedForDebug = { ...newPanel }; // Clonar para el log
-          // }
+          // addedCount se incrementará después de llamar a addPanel
+          
 
           if (piv_desinstalado_converted) {
             newEventsToCreate.push({
@@ -508,7 +500,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             const reinstallDateObj = parseAndValidateDateFromBillingUtils(piv_reinstalado_converted);
             const installDateObj = parseAndValidateDateFromBillingUtils(piv_instalado_converted);
 
-            if (reinstallDateObj && desinstallDateObj && reinstallDateObj > desinstallDateObj) {
+            if (reinstallDateObj && desinstallDateObj && reinstallDateObj >= desinstallDateObj) { // >= para incluir mismo día
               newEventsToCreate.push({
                 id: crypto.randomUUID(),
                 panelId: codigo_parada,
@@ -529,25 +521,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           }
         });
 
-        if (newPanelsToImport.length > 0) {
-          setPanels(prev => [...prev, ...newPanelsToImport].sort((a, b) => a.codigo_parada.localeCompare(b.codigo_parada)));
-          // console.log(`[Importación Inicial] Paneles añadidos al estado: ${newPanelsToImport.length}.`);
-          // if(firstPanelMappedForDebug) console.log('Primer panel mapeado en DataProvider:', firstPanelMappedForDebug);
-        }
+        // Procesar paneles y eventos en lotes para actualizar el estado
+        const panelAddPromises = newPanelsToImport.map(panel => addPanel(panel));
+        const panelAddResults = await Promise.all(panelAddPromises);
+        addedCount = panelAddResults.filter(r => r.success).length;
+
+
         if (newEventsToCreate.length > 0) {
-          setPanelEvents(prevEvents => [...prevEvents, ...newEventsToCreate].sort((a,b) => {
-             const dateA = a.fecha ? parseISO(a.fecha).getTime() : 0;
-             const dateB = b.fecha ? parseISO(b.fecha).getTime() : 0;
-             return dateA - dateB; 
-          }));
-          // console.log(`[Importación Inicial] Eventos PIV creados y añadidos: ${newEventsToCreate.length}`);
+          const eventAddPromises = newEventsToCreate.map(event => addPanelEvent(event));
+          await Promise.all(eventAddPromises);
         }
         
-        const panelIdsToRefresh = new Set([...newPanelsToImport.map(p => p.codigo_parada), ...newEventsToCreate.map(e => e.panelId)]);
+        // Refrescar estado para todos los paneles importados y los afectados por nuevos eventos
+        const panelIdsToRefresh = new Set([
+            ...newPanelsToImport.map(p => p.codigo_parada), 
+            ...newEventsToCreate.map(e => e.panelId)
+        ]);
+
         panelIdsToRefresh.forEach(pid => {
-            const currentPanel = getPanelById(pid); 
-            const eventsForThisPanel = getEventsForPanel(pid); 
-            if(currentPanel) refreshPanelStatus(pid, eventsForThisPanel);
+            refreshPanelStatus(pid); 
         });
 
     } else { // fileType === 'monthly' (importación de eventos)
@@ -591,7 +583,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                   }
               } else if (eventKey === 'oldStatus' || eventKey === 'newStatus') {
                   const statusVal = String(row[excelHeader] || '').trim().toLowerCase();
-                  // eventStatusValueMapping debe existir y ser robusto
                   const panelStatusMapped = eventStatusValueMapping[statusVal] || 'unknown'; 
                   
                   if (eventKey === 'oldStatus') panelEvent.oldStatus = panelStatusMapped as PanelStatus;
@@ -618,36 +609,34 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 }
                 panelEvent.tipo = tipoEventoDeterminado;
             }
+            // Los campos oldStatus y newStatus no son parte del modelo PanelEvent final, se usan solo para determinar 'tipo'
             delete panelEvent.oldStatus;
             delete panelEvent.newStatus;
             
             newEventsToImport.push(panelEvent as PanelEvent);
-            addedCount++;
         });
 
         if (newEventsToImport.length > 0) {
-            setPanelEvents(prevEvents => [...prevEvents, ...newEventsToImport].sort((a,b) => {
-                const dateA = a.fecha ? parseISO(a.fecha).getTime() : 0;
-                const dateB = b.fecha ? parseISO(b.fecha).getTime() : 0;
-                return dateA - dateB;
-            }));
+            const eventAddPromises = newEventsToImport.map(event => addPanelEvent(event));
+            const eventAddResults = await Promise.all(eventAddPromises);
+            const successfulEventAdds = eventAddResults.filter(r => r.success).length;
+            addedCount += successfulEventAdds;
+
             const panelIdsAffected = new Set(newEventsToImport.map(e => e.panelId));
             panelIdsAffected.forEach(pid => {
-                const currentPanel = getPanelById(pid);
-                const eventsForThisPanel = getEventsForPanel(pid);
-                if(currentPanel) refreshPanelStatus(pid, eventsForThisPanel);
+                refreshPanelStatus(pid);
             });
         }
     }
 
-    const opSuccess = addedCount > 0 || (fileType === 'initial' && newPanelsToImport.length > 0);
+    const opSuccess = addedCount > 0;
     let opMessage = `Registros procesados desde archivo: ${processedCountFromFile}. Añadidos: ${addedCount}. Omitidos: ${skippedCount}.`;
     if (errors.length > 0) {
         opMessage += ` Errores/Advertencias: ${errors.length}. Revise los detalles y la consola. Primeros errores: ${errors.slice(0,5).join('; ')}`;
     } else if (addedCount > 0) {
         opMessage += fileType === 'initial' ? ' Importación de paneles completada.' : ' Importación de eventos completada.';
-    } else if (fileType === 'initial' && newPanelsToImport.length > 0 && addedCount === 0 && skippedCount === newPanelsToImport.length) {
-         opMessage = `Se procesaron ${processedCountFromFile} paneles del archivo, pero todos fueron omitidos debido a duplicados o errores.`;
+    } else if (skippedCount === processedCountFromFile && processedCountFromFile > 0) {
+         opMessage = `Se procesaron ${processedCountFromFile} ${fileType === 'initial' ? 'paneles' : 'eventos'} del archivo, pero todos fueron omitidos debido a duplicados o errores.`;
     }
      else {
         opMessage = `No se ${fileType === 'initial' ? 'importaron paneles nuevos válidos' : 'importaron eventos nuevos válidos'}. Verifique el archivo y los logs.`;
@@ -662,15 +651,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         processedCount: jsonData.length, 
         billingStats: fileType === 'initial' ? billingStats : undefined
     };
-  }, [panels, panelEvents, refreshPanelStatus, getPanelById, getEventsForPanel]); 
+  }, [panels, panelEvents, refreshPanelStatus, addPanel, addPanelEvent, getPanelById, getEventsForPanel]); // Incluir addPanel y addPanelEvent aquí
 
   const deletePanel = useCallback(async (panelId: string): Promise<DataOperationResult> => {
-    // console.warn(`Delete operation for panel ${panelId} is not fully implemented.`);
     return { success: false, message: "Función de eliminación no implementada." };
   }, []);
 
   const deletePanelEvent = useCallback(async (eventId: string): Promise<DataOperationResult> => {
-    // console.warn(`Delete operation for event ${eventId} is not fully implemented.`);
     return { success: false, message: "Función de eliminación no implementada." };
   }, []);
 
@@ -715,7 +702,24 @@ export const useData = () => {
   return context;
 };
 
+// Mapeo de estados de texto a PanelStatus
+// Este mapeo se usa en la importación de eventos mensuales si los estados vienen como texto.
+const eventStatusValueMapping: { [key: string]: PanelStatus } = {
+  'instalado': 'installed',
+  'eliminado': 'removed',
+  'mantenimiento': 'maintenance',
+  'pendiente instalacion': 'pending_installation',
+  'pendiente instalación': 'pending_installation',
+  'pendiente eliminacion': 'pending_removal',
+  'pendiente eliminación': 'pending_removal',
+  'desconocido': 'unknown',
+  'ok': 'installed',
+  'en rev.': 'maintenance',
+  'desinstalado': 'removed',
+  'pendiente': 'pending_installation', 
+};
 
+// Helper para validar fechas YYYY-MM-DD (puede ser redundante si parseAndValidateDate de billing-utils es robusto)
 const isValidDateString = (dateStr: any): dateStr is string => {
   if (typeof dateStr !== 'string' || !dateStr.trim()) return false;
   
@@ -727,21 +731,3 @@ const isValidDateString = (dateStr: any): dateStr is string => {
   const dateObj = parseISO(datePart);
   return isValid(dateObj) && formatDateFnsInternal(dateObj, 'yyyy-MM-dd') === datePart;
 };
-
-const eventStatusValueMapping: { [key: string]: PanelStatus } = {
-  'instalado': 'installed',
-  'eliminado': 'removed',
-  'mantenimiento': 'maintenance',
-  'pendiente instalacion': 'pending_installation',
-  'pendiente instalación': 'pending_installation', // con tilde
-  'pendiente eliminacion': 'pending_removal',
-  'pendiente eliminación': 'pending_removal', // con tilde
-  'desconocido': 'unknown',
-  'ok': 'installed', // Vigencia
-  'en rev.': 'maintenance', // Vigencia
-  'desinstalado': 'removed', // Vigencia
-  'pendiente': 'pending_installation', // Vigencia (genérico)
-};
-
-
-    
