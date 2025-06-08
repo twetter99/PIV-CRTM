@@ -2,26 +2,24 @@
 // src/types/piv.ts
 export interface Panel {
   codigo_parada: string;
-  piv_instalado: string; // Was string, not string | null
+  piv_instalado: string; // Vuelve a ser string, no string | null
   piv_desinstalado?: string | null;
   piv_reinstalado?: string | null;
   importe_mensual: number;
 
-  // Existing UI/derived fields from before full expansion
+  // Campos que estaban en la versión estable anterior
   municipality?: string;
   client?: string;
   address?: string;
-  status: PanelStatus; // Not optional
+  status: PanelStatus; // No opcional
   notes?: string;
-  lastStatusUpdate: string | null; // Not optional
+  lastStatusUpdate: string | null; // No opcional
 
-  // Fields from Excel that might have been partially mapped before full expansion
   marquesina?: string;
   cce?: string;
   ultima_instalacion_o_reinstalacion?: string | null;
   vigencia?: string;
 
-  // Other utility fields
   latitude?: number;
   longitude?: number;
   fecha_importacion?: string;
@@ -39,7 +37,7 @@ export interface PanelEvent {
   id: string;
   panelId: string;
   tipo: "DESINSTALACION" | "REINSTALACION";
-  fecha: string;
+  fecha: string; // YYYY-MM-DD
   notes?: string;
 
   oldStatus?: PanelStatus;

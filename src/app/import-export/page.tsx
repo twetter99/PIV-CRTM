@@ -70,9 +70,10 @@ const providerToExcelMap: { [providerKey: string]: string[] } = {
   // --- Información Adicional y de Contrato ---
   'Empresas concesionarias': ['empresaConcesionaria', 'Empresas concesionarias', 'Empresa', 'Concesionaria', 'Cliente'],
   'Última instalación/reinstalación': ['ultimaInstalacionOReinstalacion', 'Última instalación/reinstalación', 'Ultima instalacion', 'Fecha Ultima Mod'],
-  'Notas': ['notas', 'Notas', 'Observaciones', 'Observaciones PIV'], // Priorizar este para notas generales
+  'Notas': ['notas', 'Notas', 'Observaciones', 'Observaciones PIV'], 
   'Marquesina': ['marquesina', 'Marquesina'],
   'CCE': ['cce', 'CCE'],
+  // Los campos de la "gran expansión" se han eliminado de este mapa
 };
 
 
@@ -94,7 +95,6 @@ function mapAndEnsureColumns(cleanedData: any[], type: 'initial' | 'monthly'): a
       return mappedRowForProvider;
     });
   }
-  // For monthly, direct passthrough as validation is simpler or handled differently.
   return cleanedData;
 }
 
@@ -109,20 +109,17 @@ function validateColumns(data: any[], type: 'initial' | 'monthly'): ColumnValida
   const availableKeys: string[] = (data && data.length > 0 && data[0]) ? Object.keys(data[0]) : [];
 
   let requiredHeaders: string[] = [];
-  let caseSensitiveComparison = true; // Claves de providerToExcelMap son ahora las de referencia
+  let caseSensitiveComparison = true; 
 
   if (type === 'initial') {
-    // These are keys expected by DataProvider after mapping
     requiredHeaders = [
         "Código parada", 
-        "Municipio Marquesina", 
+        "Municipio Marquesina",
         "Vigencia", 
         "PIV Instalado",
         "Importe Mensual",
-        // "Empresas concesionarias", // Example, add if strictly needed by DP
     ]; 
-  } else { // monthly
-    // These are raw Excel headers expected for monthly event import
+  } else { 
     requiredHeaders = ["panelid", "fecha", "estado anterior", "estado nuevo"]; 
     caseSensitiveComparison = false; 
   }
@@ -194,9 +191,8 @@ export default function ImportExportPage() {
         
         let rawJsonData;
         if (type === 'initial') {
-          // Headers in row 5, data starts from row 6. `range: 4` means skip first 4 rows (0-indexed).
           rawJsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, range: 4, defval: null }) as any[];
-        } else { // monthly
+        } else { 
           rawJsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: null }) as any[];
         }
 
@@ -253,7 +249,6 @@ export default function ImportExportPage() {
           return;
         }
         
-        // Pass mappedData to DataProvider
         const result = await importInitialData(mappedData, type);
 
 
@@ -440,3 +435,4 @@ export default function ImportExportPage() {
     
 
     
+
