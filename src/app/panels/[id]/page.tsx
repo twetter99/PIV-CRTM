@@ -27,9 +27,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 
-// Lista de campos con etiquetas personalizadas. PanelKey debe ser la clave camelCase del objeto panel.
+// Lista de campos a mostrar con etiquetas personalizadas.
+// panelKey debe coincidir con la propiedad camelCase en el objeto 'panel' (como viene del Excel)
 const explicitFieldsToDisplay: Array<{ label: string; panelKey: string }> = [
-  { label: 'Código Parada', panelKey: 'codigo_parada' }, // Asumiendo que este sigue siendo snake_case en el objeto panel
+  { label: 'Código Parada', panelKey: 'codigoParada' },
   { label: 'Municipio Marquesina', panelKey: 'municipioMarquesina' },
   { label: 'Código Marquesina', panelKey: 'codigoMarquesina' },
   { label: 'Vigencia', panelKey: 'vigencia' },
@@ -39,44 +40,16 @@ const explicitFieldsToDisplay: Array<{ label: string; panelKey: string }> = [
   { label: 'Tipo PIV', panelKey: 'tipoPiv' },
   { label: 'Industrial', panelKey: 'industrial' },
   { label: 'Empresa Concesionaria', panelKey: 'empresaConcesionaria' },
-  { label: 'Dirección CCE', panelKey: 'direccionCce' },
-  { label: 'Última Instalación/Reinstalación', panelKey: 'ultimaInstalacionOReinstalacion' },
   { label: 'Opción 1', panelKey: 'op1' },
   { label: 'Opción 2', panelKey: 'op2' },
   { label: 'Marquesina CCE', panelKey: 'marquesinaCce' },
+  { label: 'Dirección CCE', panelKey: 'direccionCce' },
+  { label: 'Última Instalación/Reinstalación', panelKey: 'ultimaInstalacionOReinstalacion' },
   { label: 'Cambio Ubicación / Reinstalaciones Contrato 2024-2025', panelKey: 'cambioUbicacionReinstalacionesContrato2024_2025' },
   { label: 'Reinstalación Vandalizados', panelKey: 'reinstalacionVandalizados' },
   { label: 'Garantía Caducada', panelKey: 'garantiaCaducada' },
-  { label: 'Importe Mensual', panelKey: 'importe_mensual' }, // Asumiendo snake_case
-  { label: 'Observaciones', panelKey: 'observacionesPiv' }, // O la clave que uses para las observaciones generales del PIV
-  { label: 'Notas Internas', panelKey: 'notes' }, // Si 'notes' es para notas internas y diferente de 'observacionesPiv'
+  // Añadir aquí más campos si es necesario, siguiendo el mismo formato
 ];
-
-// Función para formatear claves camelCase o snake_case a etiquetas legibles
-function formatKeyToLabel(key: string): string {
-  if (!key) return '';
-  // Convertir snake_case a space case primero
-  let result = key.replace(/_/g, ' ');
-  // Insertar espacio antes de mayúsculas (para camelCase) y luego capitalizar
-  result = result.replace(/([A-Z])/g, ' $1').trim();
-  return result.charAt(0).toUpperCase() + result.slice(1).toLowerCase();
-}
-
-// Claves a excluir del renderizado dinámico si no están en explicitFieldsToDisplay
-// (porque se manejan de otra forma o no son para mostrar directamente aquí)
-const excludedKeysFromDynamicDisplay = new Set([
-  'status', 
-  'lastStatusUpdate', 
-  'latitude', 
-  'longitude',
-  'fecha_importacion',
-  'importado_por',
-  'importe_mensual_original',
-  'installationDate', // A menudo es un alias de piv_instalado o fechaInstalacion
-  // También las claves ya definidas en explicitFieldsToDisplay (se maneja en el bucle)
-  // Claves que podrían ser mapeadas de forma diferente (como client, address) si no usas los camelCase directamente.
-  'piv_instalado', 'piv_desinstalado', 'piv_reinstalado', 'municipality', 'client', 'address',
-]);
 
 
 export default function PanelDetailPage() {
@@ -153,6 +126,7 @@ export default function PanelDetailPage() {
     setEventToDelete(null);
   };
 
+  // Formatea fechas de eventos para la tabla, no para detalles del panel
   const formatDateForEventTable = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
     try {
@@ -208,14 +182,11 @@ export default function PanelDetailPage() {
     return statusMap[status as PanelStatus] || status.toString().replace(/_/g, ' ');
   };
   
-  const panelKeysToDisplay = Object.keys(panel).filter(key => !excludedKeysFromDynamicDisplay.has(key));
-  const explicitPanelKeysInDisplay = new Set(explicitFieldsToDisplay.map(f => f.panelKey));
-
   return (
     <div className="space-y-6">
       <PageHeader 
         title={`Panel: ${panel.codigo_parada || 'N/A'}`}
-        description={panel.direccionCce || panel.address || panel.municipioMarquesina || panel.municipality || `Información detallada del panel ${panel.codigo_parada || ''}`.trim()}
+        description={panel.address || panel.direccionCce || panel.municipality || panel.municipioMarquesina || `Información detallada del panel ${panel.codigo_parada || ''}`.trim()}
         actions={
           <Button variant="outline" asChild>
             <Link href="/panels"><ArrowLeft className="mr-2 h-4 w-4" />Volver al Listado</Link>
@@ -243,19 +214,6 @@ export default function PanelDetailPage() {
                 <strong>{field.label}:</strong> {displayValue}
               </div>
             );
-          })}
-          {panelKeysToDisplay
-            .filter(key => !explicitPanelKeysInDisplay.has(key)) // Solo mostrar los que no están en la lista explícita
-            .map((key) => {
-              const rawValue = panel[key as keyof Panel];
-              const displayValue = (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '') ? String(rawValue) : 'N/A';
-              const displayLabel = formatKeyToLabel(key);
-
-              return (
-                <div key={key} className="lg:col-span-1 break-words">
-                  <strong>{displayLabel}:</strong> {displayValue}
-                </div>
-              );
           })}
         </CardContent>
       </Card>
@@ -328,6 +286,3 @@ export default function PanelDetailPage() {
     </div>
   );
 }
-
-
-    
