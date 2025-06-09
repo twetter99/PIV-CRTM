@@ -13,7 +13,7 @@ import type { Panel, PanelEvent, PanelStatus } from '@/types/piv';
 import PanelForm from '@/components/panels/panel-form';
 import EventForm from '@/components/panels/event-form';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid as isValidDate } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -28,19 +28,20 @@ import {
 import { useToast } from '@/hooks/use-toast';
 
 // Define the specific fields to display with their labels (Excel headers) and corresponding panel object keys
-const fieldsToDisplay: Array<{ label: string; panelKey: keyof Panel | string; isDate?: boolean }> = [
+const fieldsToDisplay: Array<{ label: string; panelKey: keyof Panel | string }> = [
   { label: 'municipioMarquesina', panelKey: 'municipality' },
   { label: 'codigoParada', panelKey: 'codigo_parada' },
   { label: 'codigoMarquesina', panelKey: 'marquesina' }, 
   { label: 'vigencia', panelKey: 'vigencia' },
-  { label: 'fechaInstalacion', panelKey: 'piv_instalado', isDate: true },
-  { label: 'fechaDesinstalacion', panelKey: 'piv_desinstalado', isDate: true },
-  { label: 'fechaReinstalacion', panelKey: 'piv_reinstalado', isDate: true },
+  { label: 'fechaInstalacion', panelKey: 'piv_instalado' },
+  { label: 'fechaDesinstalacion', panelKey: 'piv_desinstalado' },
+  { label: 'fechaReinstalacion', panelKey: 'piv_reinstalado' },
   { label: 'tipoPiv', panelKey: 'tipo_piv' }, 
   { label: 'industrial', panelKey: 'industrial' },
   { label: 'empresaConcesionaria', panelKey: 'client' },
   { label: 'direccionCce', panelKey: 'address' },
-  { label: 'ultimaInstalacionOReinstalacion', panelKey: 'ultima_instalacion_o_reinstalacion', isDate: true },
+  { label: 'ultimaInstalacionOReinstalacion', panelKey: 'ultima_instalacion_o_reinstalacion' },
+  { label: 'garantia', panelKey: 'garantia' }, // Added garantia
 ];
 
 
@@ -102,11 +103,10 @@ export default function PanelDetailPage() {
 
   const handleDeleteEvent = async () => {
     if (eventToDelete && deletePanelEvent) {
-       // This is a simulated delete. Implement actual deletion logic if needed.
        const result = await deletePanelEvent(eventToDelete.id);
        if (result.success) {
         toast({ title: "Evento Eliminado", description: `El evento para el panel ${eventToDelete.panelId} ha sido eliminado.` });
-        if (panelId && panel) setEvents(getEventsForPanel(panelId).sort((a,b) => { // Re-fetch and sort events
+        if (panelId && panel) setEvents(getEventsForPanel(panelId).sort((a,b) => { 
             const dateA = a.fecha ? parseISO(a.fecha).getTime() : 0;
             const dateB = b.fecha ? parseISO(b.fecha).getTime() : 0;
             return dateB - dateA;
@@ -119,16 +119,15 @@ export default function PanelDetailPage() {
     setEventToDelete(null);
   };
 
-  const formatDateSafe = (dateString: string | null | undefined) => {
+  const formatDateForEventTable = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
     try {
-      // Attempt to parse assuming YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ
       const dateOnlyString = dateString.split('T')[0];
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnlyString)) { // Basic check for YYYY-MM-DD format
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnlyString)) {
         return 'Fecha Inválida';
       }
-      const parsedDate = parseISO(dateOnlyString); // parseISO is robust for YYYY-MM-DD
-      if (isValid(parsedDate) && format(parsedDate, 'yyyy-MM-dd') === dateOnlyString) { // Validate the parsed date
+      const parsedDate = parseISO(dateOnlyString);
+      if (isValidDate(parsedDate) && format(parsedDate, 'yyyy-MM-dd') === dateOnlyString) {
           return format(parsedDate, 'dd/MM/yyyy', { locale: es });
       }
       return 'Fecha Inválida';
@@ -160,7 +159,7 @@ export default function PanelDetailPage() {
     );
   }
   
-  const formatStatusBadge = (status: string | null | undefined): string => {
+  const formatStatusForEventBadge = (status: string | null | undefined): string => {
     if (status === null || status === undefined) {
       return 'Desconocido';
     }
@@ -191,7 +190,6 @@ export default function PanelDetailPage() {
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
             <CardTitle className="font-headline text-2xl">Detalles del Panel</CardTitle>
-            {/* CardDescription removed as per new requirement to only show listed fields */}
           </div>
           <Button variant="outline" size="sm" onClick={() => setIsPanelFormOpen(true)}>
             <Edit2 className="mr-2 h-4 w-4" /> Editar Panel
@@ -200,12 +198,10 @@ export default function PanelDetailPage() {
         <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4 text-sm">
           {fieldsToDisplay.map((field) => {
             const rawValue = panel[field.panelKey as keyof Panel];
-            const displayValue = field.isDate 
-              ? formatDateSafe(rawValue as string | null | undefined) 
-              : (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '' ? String(rawValue) : 'N/A');
+            const displayValue = (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '') ? String(rawValue) : 'N/A';
             
             return (
-              <div key={field.label} className="lg:col-span-1">
+              <div key={field.label} className="lg:col-span-1 break-words">
                 <strong>{field.label}:</strong> {displayValue}
               </div>
             );
@@ -236,9 +232,9 @@ export default function PanelDetailPage() {
                 <TableBody>
                   {events.map((event) => (
                     <TableRow key={event.id}>
-                      <TableCell>{formatDateSafe(event.fecha)}</TableCell>
-                      <TableCell><Badge variant="secondary">{event.oldStatus ? formatStatusBadge(event.oldStatus) : 'Inicial'}</Badge></TableCell>
-                      <TableCell><Badge variant={event.newStatus === 'installed' ? 'default' : (event.newStatus === 'removed' ? 'destructive' : 'secondary')}>{formatStatusBadge(event.newStatus)}</Badge></TableCell>
+                      <TableCell>{formatDateForEventTable(event.fecha)}</TableCell>
+                      <TableCell><Badge variant="secondary">{event.oldStatus ? formatStatusForEventBadge(event.oldStatus) : 'Inicial'}</Badge></TableCell>
+                      <TableCell><Badge variant={event.newStatus === 'installed' ? 'default' : (event.newStatus === 'removed' ? 'destructive' : 'secondary')}>{formatStatusForEventBadge(event.newStatus)}</Badge></TableCell>
                       <TableCell className="max-w-xs truncate">{event.notes || '-'}</TableCell>
                       <TableCell className="text-right space-x-1">
                         <Button variant="ghost" size="icon" onClick={() => handleEventFormOpen(event)} title="Editar Evento">
@@ -268,7 +264,7 @@ export default function PanelDetailPage() {
             <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción no se puede deshacer. Esto eliminará permanentemente el evento para el panel
-              "{eventToDelete?.panelId}" del {eventToDelete?.fecha ? formatDateSafe(eventToDelete.fecha) : ''}.
+              "{eventToDelete?.panelId}" del {eventToDelete?.fecha ? formatDateForEventTable(eventToDelete.fecha) : ''}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
