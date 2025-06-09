@@ -34,9 +34,9 @@ export default function PanelsPage() {
   const { panels, deletePanel } = useData();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterMunicipality, setFilterMunicipality] = useState(''); // Stores "" for all, or actual municipality
-  const [filterClient, setFilterClient] = useState(''); // Stores "" for all, or actual client
-  const [sortField, setSortField] = useState<SortField>('codigo_parada');
+  const [filterMunicipality, setFilterMunicipality] = useState(''); 
+  const [filterClient, setFilterClient] = useState(''); 
+  const [sortField, setSortField] = useState<SortField>('codigoParada'); // Cambiado a camelCase
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -46,21 +46,21 @@ export default function PanelsPage() {
   const [panelToDelete, setPanelToDelete] = useState<Panel | null>(null);
 
 
-  const municipalities = useMemo(() => Array.from(new Set(panels.map(p => p.municipality))), [panels]);
-  const clients = useMemo(() => Array.from(new Set(panels.map(p => p.client))), [panels]);
+  const municipalities = useMemo(() => Array.from(new Set(panels.map(p => p.municipioMarquesina || 'N/A'))), [panels]); // Usar municipioMarquesina
+  const clients = useMemo(() => Array.from(new Set(panels.map(p => p.cliente || 'N/A'))), [panels]); // Usar cliente
 
   const filteredAndSortedPanels = useMemo(() => {
     let filtered = panels.filter(panel => 
-      (panel.codigo_parada.toLowerCase().includes(searchTerm.toLowerCase()) || 
-       panel.address.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (filterMunicipality === '' || panel.municipality === filterMunicipality) && // Logic remains the same
-      (filterClient === '' || panel.client === filterClient) // Logic remains the same
+      ((panel.codigoParada || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+       (panel.direccion || '').toLowerCase().includes(searchTerm.toLowerCase())) && // Usar direccion
+      (filterMunicipality === '' || panel.municipioMarquesina === filterMunicipality) && 
+      (filterClient === '' || panel.cliente === filterClient) 
     );
 
     if (sortField) {
       filtered.sort((a, b) => {
-        const valA = a[sortField];
-        const valB = b[sortField];
+        const valA = a[sortField as keyof Panel]; // Asegurar que sortField es una clave válida de Panel
+        const valB = b[sortField as keyof Panel];
         if (valA === undefined || valA === null) return 1;
         if (valB === undefined || valB === null) return -1;
         
@@ -111,7 +111,8 @@ export default function PanelsPage() {
 
   const handleDelete = async () => {
     if (panelToDelete && deletePanel) {
-      toast({ title: "Eliminación simulada", description: `Eliminación simulada para ${panelToDelete.codigo_parada}. Implementar eliminación real en contexto.`, variant: "destructive" });
+      await deletePanel(panelToDelete.codigoParada); // Usar codigoParada
+      toast({ title: "Panel Eliminado", description: `Panel ${panelToDelete.codigoParada} eliminado.`, variant: "default" });
     }
     setShowDeleteConfirm(false);
     setPanelToDelete(null);
@@ -167,9 +168,9 @@ export default function PanelsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead onClick={() => handleSort('codigo_parada')} className="cursor-pointer">ID <SortIndicator field="codigo_parada" /></TableHead>
-              <TableHead onClick={() => handleSort('municipality')} className="cursor-pointer">Municipio <SortIndicator field="municipality" /></TableHead>
-              <TableHead onClick={() => handleSort('client')} className="cursor-pointer">Cliente <SortIndicator field="client" /></TableHead>
+              <TableHead onClick={() => handleSort('codigoParada')} className="cursor-pointer">ID <SortIndicator field="codigoParada" /></TableHead>
+              <TableHead onClick={() => handleSort('municipioMarquesina')} className="cursor-pointer">Municipio <SortIndicator field="municipioMarquesina" /></TableHead>
+              <TableHead onClick={() => handleSort('cliente')} className="cursor-pointer">Cliente <SortIndicator field="cliente" /></TableHead>
               <TableHead>Dirección</TableHead>
               <TableHead onClick={() => handleSort('status')} className="cursor-pointer">Estado <SortIndicator field="status" /></TableHead>
               <TableHead className="text-right">Acciones</TableHead>
@@ -177,24 +178,24 @@ export default function PanelsPage() {
           </TableHeader>
           <TableBody>
             {filteredAndSortedPanels.map((panel) => (
-              <TableRow key={panel.codigo_parada}>
-                <TableCell className="font-medium">{panel.codigo_parada}</TableCell>
-                <TableCell>{panel.municipality}</TableCell>
-                <TableCell>{panel.client}</TableCell>
-                <TableCell>{panel.address}</TableCell>
+              <TableRow key={panel.codigoParada}>
+                <TableCell className="font-medium">{panel.codigoParada}</TableCell>
+                <TableCell>{panel.municipioMarquesina || 'N/A'}</TableCell>
+                <TableCell>{panel.cliente || 'N/A'}</TableCell>
+                <TableCell>{panel.direccion || 'N/A'}</TableCell>
                 <TableCell><Badge variant={panel.status === 'installed' ? 'default' : (panel.status === 'removed' ? 'destructive' : 'secondary') }>{panel.status.replace(/_/g, ' ')}</Badge></TableCell>
                 <TableCell className="text-right space-x-1">
                   <Button variant="ghost" size="icon" asChild>
-                    <Link href={`/panels/${panel.codigo_parada}`} title="Ver Detalles">
+                    <Link href={`/panels/${panel.codigoParada}`} title="Ver Detalles">
                       <Eye className="h-4 w-4" />
                     </Link>
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => handleOpenForm(panel)} title="Editar Panel">
                     <Edit2 className="h-4 w-4" />
                   </Button>
-                  {/* <Button variant="ghost" size="icon" onClick={() => confirmDelete(panel)} title="Eliminar Panel" className="text-destructive hover:text-destructive">
+                  <Button variant="ghost" size="icon" onClick={() => confirmDelete(panel)} title="Eliminar Panel" className="text-destructive hover:text-destructive">
                     <Trash2 className="h-4 w-4" />
-                  </Button> */}
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -216,7 +217,7 @@ export default function PanelsPage() {
             <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción no se puede deshacer. Esto eliminará permanentemente el panel
-              "{panelToDelete?.codigo_parada}" y todos sus datos asociados.
+              "{panelToDelete?.codigoParada}" y todos sus datos asociados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -229,5 +230,3 @@ export default function PanelsPage() {
     </div>
   );
 }
-
-    

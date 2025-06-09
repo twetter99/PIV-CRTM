@@ -27,34 +27,36 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 
-// Lista de campos a mostrar con etiquetas personalizadas.
-// panelKey debe coincidir con la propiedad camelCase en el objeto 'panel' (como viene del Excel)
-const explicitFieldsToDisplay: Array<{ label: string; panelKey: string }> = [
+// Lista de campos a mostrar con etiquetas personalizadas y claves camelCase del objeto panel.
+const explicitFieldsToDisplay: Array<{ label: string; panelKey: keyof Panel | string }> = [
   { label: 'Código Parada', panelKey: 'codigoParada' },
   { label: 'Municipio Marquesina', panelKey: 'municipioMarquesina' },
   { label: 'Código Marquesina', panelKey: 'codigoMarquesina' },
   { label: 'Vigencia', panelKey: 'vigencia' },
-  { label: 'Fecha Instalación', panelKey: 'fechaInstalacion' },
-  { label: 'Fecha Desinstalación', panelKey: 'fechaDesinstalacion' },
-  { label: 'Fecha Reinstalación', panelKey: 'fechaReinstalacion' },
+  { label: 'Fecha Instalación', panelKey: 'fechaInstalacion' }, // Valor crudo del Excel
+  { label: 'Fecha Desinstalación', panelKey: 'fechaDesinstalacion' }, // Valor crudo
+  { label: 'Fecha Reinstalación', panelKey: 'fechaReinstalacion' }, // Valor crudo
   { label: 'Tipo PIV', panelKey: 'tipoPiv' },
   { label: 'Industrial', panelKey: 'industrial' },
-  { label: 'Empresa Concesionaria', panelKey: 'empresaConcesionaria' },
+  { label: 'Empresa Concesionaria', panelKey: 'empresaConcesionaria' }, // O 'cliente'
   { label: 'Opción 1', panelKey: 'op1' },
   { label: 'Opción 2', panelKey: 'op2' },
   { label: 'Marquesina CCE', panelKey: 'marquesinaCce' },
-  { label: 'Dirección CCE', panelKey: 'direccionCce' },
-  { label: 'Última Instalación/Reinstalación', panelKey: 'ultimaInstalacionOReinstalacion' },
+  { label: 'Dirección CCE', panelKey: 'direccionCce' }, // O 'direccion'
+  { label: 'Última Instalación/Reinstalación', panelKey: 'ultimaInstalacionOReinstalacion' }, // Valor crudo
   { label: 'Cambio Ubicación / Reinstalaciones Contrato 2024-2025', panelKey: 'cambioUbicacionReinstalacionesContrato2024_2025' },
   { label: 'Reinstalación Vandalizados', panelKey: 'reinstalacionVandalizados' },
   { label: 'Garantía Caducada', panelKey: 'garantiaCaducada' },
-  // Añadir aquí más campos si es necesario, siguiendo el mismo formato
+  { label: 'Observaciones', panelKey: 'observaciones' },
+  { label: 'Descripción Corta', panelKey: 'descripcionCorta'},
+  { label: 'Código PIV Asignado', panelKey: 'codigoPivAsignado'},
+  { label: 'Importe Mensual (Excel)', panelKey: 'importeMensualOriginal'}, // Muestra el valor original del Excel
 ];
 
 
 export default function PanelDetailPage() {
   const params = useParams();
-  const { getPanelById, getEventsForPanel, updatePanelEvent: contextUpdateEvent, deletePanelEvent } = useData();
+  const { getPanelById, getEventsForPanel, deletePanelEvent } = useData(); // updatePanelEvent no se usa aquí directamente
   const { toast } = useToast();
   const panelId = params.id as string;
 
@@ -68,16 +70,17 @@ export default function PanelDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<PanelEvent | null>(null);
 
-
   useEffect(() => {
     if (panelId) {
       const currentPanel = getPanelById(panelId);
       setPanel(currentPanel);
       if (currentPanel) {
+        // Log para depuración
+        console.log("Panel Data Received in Detail Page:", JSON.stringify(currentPanel, null, 2));
         setEvents(getEventsForPanel(panelId).sort((a,b) => {
           const dateA = a.fecha ? parseISO(a.fecha).getTime() : 0;
           const dateB = b.fecha ? parseISO(b.fecha).getTime() : 0;
-          return dateB - dateA;
+          return dateB - dateA; // Más reciente primero
         }));
       }
     }
@@ -85,7 +88,7 @@ export default function PanelDetailPage() {
 
   const handlePanelFormClose = () => {
     setIsPanelFormOpen(false);
-    if (panelId) setPanel(getPanelById(panelId));
+    if (panelId) setPanel(getPanelById(panelId)); // Recargar panel por si se actualizó
   };
 
   const handleEventFormOpen = (event: PanelEvent | null = null) => {
@@ -109,7 +112,7 @@ export default function PanelDetailPage() {
   };
 
   const handleDeleteEvent = async () => {
-    if (eventToDelete && deletePanelEvent) {
+    if (eventToDelete && deletePanelEvent) { // Asegurarse que deletePanelEvent existe
        const result = await deletePanelEvent(eventToDelete.id);
        if (result.success) {
         toast({ title: "Evento Eliminado", description: `El evento para el panel ${eventToDelete.panelId} ha sido eliminado.` });
@@ -126,47 +129,20 @@ export default function PanelDetailPage() {
     setEventToDelete(null);
   };
 
-  // Formatea fechas de eventos para la tabla, no para detalles del panel
   const formatDateForEventTable = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
     try {
-      const dateOnlyString = dateString.split('T')[0];
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnlyString)) {
-        return 'Fecha Inválida';
-      }
-      const parsedDate = parseISO(dateOnlyString);
-      if (isValidDate(parsedDate) && format(parsedDate, 'yyyy-MM-dd') === dateOnlyString) {
+      // Asumimos que dateString ya es YYYY-MM-DD de la lógica interna de eventos
+      const parsedDate = parseISO(dateString); 
+      if (isValidDate(parsedDate)) {
           return format(parsedDate, 'dd/MM/yyyy', { locale: es });
       }
-      return 'Fecha Inválida';
+      return dateString; // Si no es parseable como YYYY-MM-DD, mostrar tal cual
     } catch (error) {
-      return 'Fecha Inválida';
+      return dateString; // En caso de error, mostrar el string original
     }
   };
 
-
-  if (panel === undefined) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Cargando Panel..." actions={<Skeleton className="h-10 w-24" />} />
-        <Card><CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></Card>
-        <Card><CardHeader><Skeleton className="h-8 w-1/3" /></CardHeader><CardContent><Skeleton className="h-64 w-full" /></CardContent></Card>
-      </div>
-    );
-  }
-
-  if (!panel) {
-    return (
-      <div>
-        <PageHeader title="Panel No Encontrado" />
-        <p>El panel con ID "{panelId}" no pudo ser encontrado.</p>
-        <Button variant="outline" asChild className="mt-4">
-          <Link href="/panels"><ArrowLeft className="mr-2 h-4 w-4" />Volver a Paneles</Link>
-        </Button>
-      </div>
-    );
-  }
-  
   const formatStatusForEventBadge = (status: string | null | undefined): string => {
     if (status === null || status === undefined) {
       return 'Desconocido';
@@ -181,12 +157,37 @@ export default function PanelDetailPage() {
     };
     return statusMap[status as PanelStatus] || status.toString().replace(/_/g, ' ');
   };
+
+  if (panel === undefined) { // Cargando
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Cargando Panel..." actions={<Skeleton className="h-10 w-24" />} />
+        <Card><CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></Card>
+        <Card><CardHeader><Skeleton className="h-8 w-1/3" /></CardHeader><CardContent><Skeleton className="h-64 w-full" /></CardContent></Card>
+      </div>
+    );
+  }
+
+  if (!panel) { // No encontrado
+    return (
+      <div>
+        <PageHeader title="Panel No Encontrado" />
+        <p>El panel con ID "{panelId}" no pudo ser encontrado.</p>
+        <Button variant="outline" asChild className="mt-4">
+          <Link href="/panels"><ArrowLeft className="mr-2 h-4 w-4" />Volver a Paneles</Link>
+        </Button>
+      </div>
+    );
+  }
   
+  // panel.direccion ahora es el campo general, panel.direccionCce es específico
+  const pageDescription = panel.direccion || panel.direccionCce || panel.municipioMarquesina || `Información detallada del panel ${panel.codigoParada || ''}`.trim();
+
   return (
     <div className="space-y-6">
       <PageHeader 
-        title={`Panel: ${panel.codigo_parada || 'N/A'}`}
-        description={panel.address || panel.direccionCce || panel.municipality || panel.municipioMarquesina || `Información detallada del panel ${panel.codigo_parada || ''}`.trim()}
+        title={`Panel: ${panel.codigoParada || 'N/A'}`}
+        description={pageDescription}
         actions={
           <Button variant="outline" asChild>
             <Link href="/panels"><ArrowLeft className="mr-2 h-4 w-4" />Volver al Listado</Link>
@@ -198,10 +199,13 @@ export default function PanelDetailPage() {
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
             <CardTitle className="font-headline text-2xl">Detalles del Panel</CardTitle>
-             <p className="text-sm text-muted-foreground">Estado actual: <Badge variant={panel.status === 'installed' ? 'default' : (panel.status === 'removed' ? 'destructive' : 'secondary')}>{formatStatusForEventBadge(panel.status)}</Badge> (Últ. act.: {panel.lastStatusUpdate ? formatDateForEventTable(panel.lastStatusUpdate) : 'N/A'})</p>
+             <p className="text-sm text-muted-foreground">
+               Estado actual: <Badge variant={panel.status === 'installed' ? 'default' : (panel.status === 'removed' ? 'destructive' : 'secondary')}>{formatStatusForEventBadge(panel.status)}</Badge> 
+               (Últ. act.: {panel.lastStatusUpdate ? formatDateForEventTable(panel.lastStatusUpdate) : 'N/A'})
+             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => setIsPanelFormOpen(true)}>
-            <Edit2 className="mr-2 h-4 w-4" /> Editar Panel
+            <Edit2 className="mr-2 h-4 w-4" /> Editar Panel (Principal)
           </Button>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4 text-sm">
@@ -264,8 +268,8 @@ export default function PanelDetailPage() {
         </CardContent>
       </Card>
 
-      {isPanelFormOpen && <PanelForm panel={panel} onClose={handlePanelFormClose} />}
-      {isEventFormOpen && panel && <EventForm event={editingEvent} panelId={panel.codigo_parada} onClose={handleEventFormClose} />}
+      {isPanelFormOpen && panel && <PanelForm panel={panel} onClose={handlePanelFormClose} />}
+      {isEventFormOpen && panel && <EventForm event={editingEvent} panelId={panel.codigoParada} onClose={handleEventFormClose} />}
 
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>

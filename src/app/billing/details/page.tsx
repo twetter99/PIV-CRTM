@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useData } from '@/contexts/data-provider';
 import { getPanelHistoryForBillingMonth, calculateMonthlyBillingForPanel } from '@/lib/billing-utils';
-import type { DayStatus, BillingRecord, PanelStatus as PanelStatusType } from '@/lib/billing-utils';
+import type { DayStatus, BillingRecord, PanelStatus as PanelStatusType } from '@/lib/billing-utils'; // PanelStatusType para claridad
 import Link from 'next/link';
 import { useEffect, useState, Suspense } from 'react';
 import { ArrowLeft, CheckCircle, XCircle, Info } from 'lucide-react';
@@ -20,7 +20,7 @@ function BillingDetailsContent() {
   const searchParams = useSearchParams();
   const { panels, panelEvents } = useData();
 
-  const panelId = searchParams.get('panelId');
+  const panelId = searchParams.get('panelId'); // Este es codigoParada
   const year = searchParams.get('year') ? parseInt(searchParams.get('year') as string) : null;
   const month = searchParams.get('month') ? parseInt(searchParams.get('month') as string) : null;
 
@@ -79,12 +79,11 @@ function BillingDetailsContent() {
   const monthName = format(new Date(year, month - 1, 1), 'MMMM', { locale: es });
   const capitalizedMonthName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
-
   return (
     <div className="space-y-6">
       <PageHeader 
-        title={`Detalles de Facturación: ${billingSummary.panelDetails.codigo_parada}`}
-        description={`Mostrando actividad diaria para ${capitalizedMonthName} ${year}. Cliente: ${billingSummary.panelDetails.client}`}
+        title={`Detalles de Facturación: ${billingSummary.panelDetails.codigoParada}`} // Usar panelDetails.codigoParada
+        description={`Mostrando actividad diaria para ${capitalizedMonthName} ${year}. Cliente: ${billingSummary.panelDetails.cliente}`} // Usar panelDetails.cliente
         actions={
            <Button variant="outline" asChild>
             <Link href="/billing"><ArrowLeft className="mr-2 h-4 w-4" />Volver a Resumen</Link>
@@ -98,7 +97,7 @@ function BillingDetailsContent() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div><strong>ID Panel:</strong> {billingSummary.panelId}</div>
-          <div><strong>Dirección:</strong> {billingSummary.panelDetails.address}</div>
+          <div><strong>Dirección:</strong> {billingSummary.panelDetails.direccion || billingSummary.panelDetails.direccionCce || 'N/A'}</div>
           <div><strong>Días Facturados:</strong> {billingSummary.billedDays} días <span className="text-xs text-muted-foreground">(base 30 estándar)</span></div>
           <div className="font-semibold"><strong>Importe:</strong> €{billingSummary.amount.toFixed(2)}</div>
         </CardContent>

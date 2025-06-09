@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useData } from '@/contexts/data-provider';
 import { calculateMonthlyBillingForPanel } from '@/lib/billing-utils';
-import type { BillingRecord, Panel } from '@/types/piv';
+import type { BillingRecord, Panel } from '@/types/piv'; // Panel type is no longer directly used here for billingData map
 import { Eye, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useMemo, useEffect } from 'react';
@@ -27,7 +27,8 @@ export default function BillingPage() {
     console.log(`[BillingPage] Recalculating billingData for Year: ${selectedYear}, Month: ${selectedMonth}`);
     return panels
       .map(panel => {
-         return calculateMonthlyBillingForPanel(panel.codigo_parada, selectedYear, selectedMonth, panelEvents, panels);
+         // calculateMonthlyBillingForPanel ahora usa panel.codigoParada
+         return calculateMonthlyBillingForPanel(panel.codigoParada, selectedYear, selectedMonth, panelEvents, panels);
       })
       .filter(record => record.billedDays > 0 || record.panelDetails?.status === 'installed'); 
   }, [panels, panelEvents, selectedYear, selectedMonth]);
@@ -43,13 +44,13 @@ export default function BillingPage() {
     try {
       const exportData = billingData.map(record => ({
         'ID Panel': record.panelId,
-        'Cliente': record.panelDetails?.client || 'N/A',
-        'Municipio': record.panelDetails?.municipality || 'N/A',
+        'Cliente': record.panelDetails?.cliente || 'N/A', // Usar panelDetails.cliente
+        'Municipio': record.panelDetails?.municipioMarquesina || 'N/A', // Usar panelDetails.municipioMarquesina
         'Días Facturados (Base 30)': record.billedDays,
         'Importe (€)': record.amount.toFixed(2),
         'Estado': record.panelDetails?.status ? record.panelDetails.status.replace(/_/g, ' ') : 'N/A',
-        'Dirección': record.panelDetails?.address || 'N/A',
-        'Fecha Instalación PIV': record.panelDetails?.piv_instalado || 'N/A'
+        'Dirección': record.panelDetails?.direccion || 'N/A', // Usar panelDetails.direccion
+        'Fecha Instalación PIV': record.panelDetails?.fechaInstalacion || 'N/A' // Usar panelDetails.fechaInstalacion
       }));
 
       exportData.push({
@@ -137,8 +138,8 @@ export default function BillingPage() {
             {billingData.map((record) => (
               <TableRow key={record.panelId}>
                 <TableCell className="font-medium">{record.panelId}</TableCell>
-                <TableCell>{record.panelDetails?.client || 'N/A'}</TableCell>
-                <TableCell>{record.panelDetails?.municipality || 'N/A'}</TableCell>
+                <TableCell>{record.panelDetails?.cliente || 'N/A'}</TableCell>
+                <TableCell>{record.panelDetails?.municipioMarquesina || 'N/A'}</TableCell>
                 <TableCell><Badge variant={record.panelDetails?.status === 'installed' ? 'default' : (record.panelDetails?.status === 'removed' ? 'destructive' : 'secondary') }>{record.panelDetails?.status?.replace(/_/g, ' ') || 'N/A'}</Badge></TableCell>
                 <TableCell className="text-center">
                   {record.billedDays} / 30
@@ -147,6 +148,7 @@ export default function BillingPage() {
                 <TableCell className="text-right font-semibold">€{record.amount.toFixed(2)}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" asChild>
+                    {/* Enlace a detalles de facturación, panelId ya es codigoParada */}
                     <Link href={`/billing/details?panelId=${record.panelId}&year=${selectedYear}&month=${selectedMonth}`} title="Ver Detalles de Facturación">
                       <Eye className="h-4 w-4" />
                     </Link>

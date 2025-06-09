@@ -14,9 +14,13 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 
-const parseDate = (dateString: string): Date => {
+const parseDate = (dateString: string | null | undefined): Date | null => {
+  if (!dateString) return null;
+  // Asumimos que las fechas en Panel ya están en YYYY-MM-DD
   const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return isValid(d) ? d : null;
 };
 
 export function KeyMetrics() {
@@ -31,7 +35,8 @@ export function KeyMetrics() {
     const currentYear = new Date().getFullYear();
     let totalBilled = 0;
     panels.forEach(panel => {
-      const panelBilling = calculateMonthlyBillingForPanel(panel.codigo_parada, currentYear, currentMonth, panelEvents, panels);
+      // calculateMonthlyBillingForPanel ahora usa panel.codigoParada
+      const panelBilling = calculateMonthlyBillingForPanel(panel.codigoParada, currentYear, currentMonth, panelEvents, panels);
       totalBilled += panelBilling.amount;
     });
     setMonthlyBilledAmount(totalBilled);
@@ -46,7 +51,8 @@ export function KeyMetrics() {
         return false;
       }
 
-      const lastKnownDate = panel.lastStatusUpdate ? parseDate(panel.lastStatusUpdate) : (panel.installationDate ? parseDate(panel.installationDate) : null);
+      // Usar panel.lastStatusUpdate o panel.fechaInstalacion
+      const lastKnownDate = panel.lastStatusUpdate ? parseDate(panel.lastStatusUpdate) : (panel.fechaInstalacion ? parseDate(panel.fechaInstalacion) : null);
       
       if (lastKnownDate) {
         return lastKnownDate < threeMonthsAgo;
@@ -99,14 +105,15 @@ export function KeyMetrics() {
                 </TableHeader>
                 <TableBody>
                   {warnings.map(panel => (
-                    <TableRow key={panel.codigo_parada}>
+                    <TableRow key={panel.codigoParada}>
                       <TableCell className="font-medium">
-                        <Link href={`/panels/${panel.codigo_parada}`} className="text-primary hover:underline">
-                          {panel.codigo_parada}
+                        {/* Usar panel.codigoParada para el enlace */}
+                        <Link href={`/panels/${panel.codigoParada}`} className="text-primary hover:underline">
+                          {panel.codigoParada}
                         </Link>
                       </TableCell>
-                      <TableCell>{panel.municipality}</TableCell>
-                      <TableCell>{panel.client}</TableCell>
+                      <TableCell>{panel.municipioMarquesina || 'N/A'}</TableCell> {/* Usar panel.municipioMarquesina */}
+                      <TableCell>{panel.cliente || 'N/A'}</TableCell> {/* Usar panel.cliente */}
                       <TableCell><Badge variant={panel.status === 'installed' ? 'default' : 'secondary'}>{formatStatusDisplay(panel.status)}</Badge></TableCell>
                       <TableCell className="text-right">{panel.lastStatusUpdate ? format(new Date(panel.lastStatusUpdate), 'dd/MM/yyyy', { locale: es }) : 'N/A'}</TableCell>
                     </TableRow>
@@ -120,4 +127,3 @@ export function KeyMetrics() {
     </>
   );
 }
-

@@ -1,3 +1,4 @@
+
 "use client";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -17,20 +18,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useData } from "@/contexts/data-provider";
-import type { Panel, PanelStatus } from "@/types/piv";
+import type { Panel, PanelStatus } from "@/types/piv"; // Panel ya usa camelCase
 import { ALL_PANEL_STATUSES } from "@/types/piv";
 import { useToast } from "@/hooks/use-toast";
 
+// Actualizar schema para usar nombres camelCase
 const panelFormSchema = z.object({
-  codigo_parada: z.string().min(1, "El ID del panel es obligatorio"),
-  municipality: z.string().min(1, "El municipio es obligatorio"),
-  client: z.string().min(1, "El cliente es obligatorio"),
-  address: z.string().min(1, "La dirección es obligatoria"),
+  codigoParada: z.string().min(1, "El ID del panel es obligatorio"),
+  municipioMarquesina: z.string().min(1, "El municipio es obligatorio"),
+  cliente: z.string().min(1, "El cliente es obligatorio"),
+  direccion: z.string().min(1, "La dirección es obligatoria"),
   latitude: z.coerce.number().optional(),
   longitude: z.coerce.number().optional(),
-  installationDate: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: "Formato de fecha inválido (AAAA-MM-DD)" }),
+  fechaInstalacion: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: "Formato de fecha inválido (AAAA-MM-DD)" }),
   status: z.enum(ALL_PANEL_STATUSES),
-  notes: z.string().optional(),
+  observaciones: z.string().optional(), // Antes notes, ahora observaciones
+  // Añadir otros campos camelCase que se quieran editar en el formulario
+  tipoPiv: z.string().optional(),
+  industrial: z.string().optional(),
+  vigencia: z.string().optional(),
+  // ...etc.
 });
 
 type PanelFormValues = z.infer<typeof panelFormSchema>;
@@ -57,36 +64,45 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
   const form = useForm<PanelFormValues>({
     resolver: zodResolver(panelFormSchema),
     defaultValues: {
-      codigo_parada: panel?.codigo_parada || "",
-      municipality: panel?.municipality || "",
-      client: panel?.client || "",
-      address: panel?.address || "",
+      codigoParada: panel?.codigoParada || "",
+      municipioMarquesina: panel?.municipioMarquesina || "",
+      cliente: panel?.cliente || "",
+      direccion: panel?.direccion || "",
       latitude: panel?.latitude || undefined,
       longitude: panel?.longitude || undefined,
-      installationDate: panel?.installationDate ? panel.installationDate.split('T')[0] : undefined,
+      fechaInstalacion: panel?.fechaInstalacion ? panel.fechaInstalacion.split('T')[0] : undefined,
       status: panel?.status || 'pending_installation',
-      notes: panel?.notes || "",
+      observaciones: panel?.observaciones || "",
+      tipoPiv: panel?.tipoPiv || "",
+      industrial: panel?.industrial || "",
+      vigencia: panel?.vigencia || "",
+      // ...etc. para otros campos
     },
   });
 
   async function onSubmit(data: PanelFormValues) {
-    const panelData: Panel = {
-        ...data,
-        installationDate: data.installationDate || undefined,
+    // El objeto 'data' ya tiene las claves camelCase del schema
+    const panelData: Partial<Panel> = { // Usar Partial<Panel> para flexibilidad
+        ...data, 
+        // Asegurarse que las fechas opcionales sean undefined si están vacías
+        fechaInstalacion: data.fechaInstalacion || undefined, 
     };
 
     try {
       let result;
       if (isEditing && panel) {
-        result = await updatePanel(panel.codigo_parada, panelData);
+        result = await updatePanel(panel.codigoParada, panelData); // panel.codigoParada para identificar
       } else {
-        result = await addPanel(panelData);
+        // Para addPanel, asegurar que todos los campos requeridos por 'Panel' estén presentes
+        // Esto podría necesitar un casting o una construcción más cuidadosa si 'Panel' tiene campos obligatorios
+        // que no están en PanelFormValues
+        result = await addPanel(panelData as Panel); // Puede necesitar ajuste
       }
 
       if (result.success) {
         toast({
           title: isEditing ? "Panel Actualizado" : "Panel Añadido",
-          description: `El panel ${data.codigo_parada} ha sido ${isEditing ? 'actualizado' : 'añadido'} correctamente.`,
+          description: `El panel ${data.codigoParada} ha sido ${isEditing ? 'actualizado' : 'añadido'} correctamente.`,
         });
         onClose();
       } else {
@@ -111,7 +127,7 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
         <DialogHeader>
           <DialogTitle>{isEditing ? "Editar Panel" : "Añadir Nuevo Panel"}</DialogTitle>
           <DialogDescription>
-            {isEditing ? `Actualizar detalles para el panel ${panel?.codigo_parada}.` : "Introduce los detalles para el nuevo panel."}
+            {isEditing ? `Actualizar detalles para el panel ${panel?.codigoParada}.` : "Introduce los detalles para el nuevo panel."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -119,10 +135,10 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="codigo_parada"
+                name="codigoParada"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>ID Panel (codigo_parada)</FormLabel>
+                    <FormLabel>ID Panel (codigoParada)</FormLabel>
                     <FormControl>
                       <Input placeholder="ej., P001" {...field} disabled={isEditing} />
                     </FormControl>
@@ -154,10 +170,10 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="municipality"
+                name="municipioMarquesina"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Municipio</FormLabel>
+                    <FormLabel>Municipio Marquesina</FormLabel>
                     <FormControl>
                       <Input placeholder="ej., Ciudad A" {...field} />
                     </FormControl>
@@ -167,10 +183,10 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
               />
               <FormField
                 control={form.control}
-                name="client"
+                name="cliente"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cliente</FormLabel>
+                    <FormLabel>Cliente / Empresa Concesionaria</FormLabel>
                     <FormControl>
                       <Input placeholder="ej., Cliente X" {...field} />
                     </FormControl>
@@ -181,7 +197,7 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
             </div>
             <FormField
               control={form.control}
-              name="address"
+              name="direccion"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Dirección</FormLabel>
@@ -193,6 +209,20 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
               )}
             />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <FormField
+                control={form.control}
+                name="fechaInstalacion"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fecha de Instalación</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormDescription>Opcional. Formato: AAAA-MM-DD</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="latitude"
@@ -219,29 +249,54 @@ export default function PanelForm({ panel, onClose }: PanelFormProps) {
                   </FormItem>
                 )}
               />
-              <FormField
+            </div>
+             <FormField
                 control={form.control}
-                name="installationDate"
+                name="tipoPiv"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Fecha de Instalación</FormLabel>
+                    <FormLabel>Tipo PIV</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <Input placeholder="ej., Digital" {...field} />
                     </FormControl>
-                    <FormDescription>Opcional. Formato: AAAA-MM-DD</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
+               <FormField
+                control={form.control}
+                name="industrial"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Industrial</FormLabel>
+                    <FormControl>
+                      <Input placeholder="ej., Modelo X" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="vigencia"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Vigencia</FormLabel>
+                    <FormControl>
+                      <Input placeholder="ej., 2025" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             <FormField
               control={form.control}
-              name="notes"
+              name="observaciones"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Notas</FormLabel>
+                  <FormLabel>Observaciones</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Cualquier nota adicional sobre el panel" {...field} />
+                    <Textarea placeholder="Cualquier observación adicional sobre el panel" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

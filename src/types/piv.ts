@@ -1,32 +1,44 @@
 
 // src/types/piv.ts
 export interface Panel {
-  codigo_parada: string;
-  piv_instalado: string; // Vuelve a ser string, no string | null
-  piv_desinstalado?: string | null;
-  piv_reinstalado?: string | null;
-  importe_mensual: number;
+  // Campos principales ahora en camelCase para coincidir con Excel y UI
+  codigoParada: string; // Antes codigo_parada
+  fechaInstalacion?: string | null; // Antes piv_instalado, ahora opcional para importación directa
+  fechaDesinstalacion?: string | null; // Antes piv_desinstalado
+  fechaReinstalacion?: string | null; // Antes piv_reinstalado
+  importeMensual?: number; // Antes importe_mensual
 
-  // Campos que estaban en la versión estable anterior
-  municipality?: string;
-  client?: string;
-  address?: string;
-  status: PanelStatus; // No opcional
-  notes?: string;
-  lastStatusUpdate: string | null; // No opcional
+  municipioMarquesina?: string; // Nuevo o antes municipality
+  cliente?: string; // Antes client
+  direccion?: string; // Antes address
+  
+  status: PanelStatus; // No opcional, calculado
+  lastStatusUpdate: string | null; // No opcional, calculado
 
-  marquesina?: string;
-  cce?: string;
-  ultima_instalacion_o_reinstalacion?: string | null;
+  // Campos directamente del Excel (camelCase)
+  codigoMarquesina?: string;
   vigencia?: string;
+  tipoPiv?: string;
+  industrial?: string;
+  empresaConcesionaria?: string; // Podría ser el mismo que 'cliente' o uno diferente
+  op1?: string;
+  op2?: string;
+  marquesinaCce?: string;
+  direccionCce?: string; // Podría ser el mismo que 'direccion'
+  ultimaInstalacionOReinstalacion?: string | null;
+  cambioUbicacionReinstalacionesContrato2024_2025?: string;
+  reinstalacionVandalizados?: string;
+  garantiaCaducada?: string;
+  observaciones?: string; // Antes notes
 
+  // Campos de gestión interna
   latitude?: number;
   longitude?: number;
-  fecha_importacion?: string;
-  importado_por?: string;
-  importe_mensual_original?: string;
-  installationDate?: string | null;
+  fechaImportacion?: string;
+  importadoPor?: string;
+  importeMensualOriginal?: string; // Para guardar el valor original del Excel si se procesa
 
+  // Permitir otras propiedades que puedan venir del Excel
   [key: string]: any;
 }
 
@@ -35,7 +47,7 @@ export const ALL_PANEL_STATUSES: PanelStatus[] = ['installed', 'removed', 'maint
 
 export interface PanelEvent {
   id: string;
-  panelId: string;
+  panelId: string; // Debe coincidir con Panel.codigoParada
   tipo: "DESINSTALACION" | "REINSTALACION";
   fecha: string; // YYYY-MM-DD
   notes?: string;
