@@ -27,6 +27,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 
+// Define the specific fields to display with their labels (Excel headers) and corresponding panel object keys
+const fieldsToDisplay: Array<{ label: string; panelKey: keyof Panel | string; isDate?: boolean }> = [
+  { label: 'municipioMarquesina', panelKey: 'municipality' }, // Assuming 'municipality' holds this data
+  { label: 'codigoParada', panelKey: 'codigo_parada' },
+  { label: 'codigoMarquesina', panelKey: 'codigo_marquesina' }, // Assumes panel object has 'codigo_marquesina'
+  { label: 'vigencia', panelKey: 'vigencia' }, // Assumes panel object has 'vigencia'
+  { label: 'fechaInstalacion', panelKey: 'piv_instalado', isDate: true },
+  { label: 'fechaDesinstalacion', panelKey: 'piv_desinstalado', isDate: true },
+  { label: 'fechaReinstalacion', panelKey: 'piv_reinstalado', isDate: true },
+  { label: 'tipoPiv', panelKey: 'tipo_piv' }, // Assumes panel object has 'tipo_piv'
+  { label: 'industrial', panelKey: 'industrial' }, // Assumes panel object has 'industrial'
+  { label: 'empresaConcesionaria', panelKey: 'client' }, // Assuming 'client' holds this data
+  { label: 'direccionCce', panelKey: 'address' }, // Assuming 'address' holds this data
+  { label: 'ultimaInstalacionOReinstalacion', panelKey: 'ultima_instalacion_o_reinstalacion', isDate: true },
+];
+
 
 export default function PanelDetailPage() {
   const params = useParams();
@@ -95,11 +111,9 @@ export default function PanelDetailPage() {
   const formatDateSafe = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
     try {
-      // Ensure the date string is just the date part if it includes time
       const dateOnlyString = dateString.split('T')[0];
       return format(parseISO(dateOnlyString), 'dd/MM/yyyy', { locale: es });
     } catch (error) {
-      // console.error("Error formatting date:", dateString, error);
       return 'Fecha Inválida';
     }
   };
@@ -158,60 +172,27 @@ export default function PanelDetailPage() {
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
             <CardTitle className="font-headline text-2xl">Detalles del Panel</CardTitle>
-            <CardDescription>Municipio: {panel.municipality || panel.municipio_marquesina || 'N/A'} | Cliente: {panel.client || panel.empresa_concesionaria || 'N/A'}</CardDescription>
+            <CardDescription>
+              Municipio: {panel.municipality || panel.municipio_marquesina || 'N/A'} | Cliente: {panel.client || panel.empresa_concesionaria || 'N/A'}
+            </CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={() => setIsPanelFormOpen(true)}>
             <Edit2 className="mr-2 h-4 w-4" /> Editar Panel
           </Button>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4 text-sm">
-          {/* Grupo: Información General y de Identificación */}
-          <div className="lg:col-span-1"><strong>ID Panel (Código parada):</strong> {panel.codigo_parada}</div>
-          <div className="lg:col-span-1"><strong>Estado:</strong> <Badge variant={panel.status === 'installed' ? 'default' : (panel.status === 'removed' ? 'destructive' : 'secondary')}>{formatStatus(panel.status)}</Badge></div>
-          <div className="lg:col-span-1"><strong>Municipio Marquesina:</strong> {panel.municipio_marquesina || panel.municipality || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Dirección CCE:</strong> {panel.direccion_cce || panel.address || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Empresa Concesionaria:</strong> {panel.empresa_concesionaria || panel.client || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Descripción corta:</strong> {panel.descripcion_corta || 'N/A'}</div>
-          
-          {/* Grupo: Fechas Clave PIV */}
-          <div className="lg:col-span-1"><strong>PIV Instalado:</strong> {formatDateSafe(panel.piv_instalado)}</div>
-          <div className="lg:col-span-1"><strong>PIV Desinstalado:</strong> {formatDateSafe(panel.piv_desinstalado)}</div>
-          <div className="lg:col-span-1"><strong>PIV Reinstalado:</strong> {formatDateSafe(panel.piv_reinstalado)}</div>
-          <div className="lg:col-span-1"><strong>Última Instalación/Reinstalación:</strong> {formatDateSafe(panel.ultima_instalacion_reinstalacion || panel.installationDate)}</div>
-          <div className="lg:col-span-1"><strong>Última Actualización Estado:</strong> {formatDateSafe(panel.lastStatusUpdate)}</div>
-          <div className="lg:col-span-1"><strong>Fecha Importación:</strong> {formatDateSafe(panel.fecha_importacion)}</div>
-
-          {/* Grupo: Detalles Técnicos y Contrato */}
-          <div className="lg:col-span-1"><strong>Código PIV Asignado:</strong> {panel.codigo_piv_asignado || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Tipo PIV:</strong> {panel.tipo_piv || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Código Marquesina:</strong> {panel.codigo_marquesina || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Marquesina:</strong> {panel.marquesina || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Industrial:</strong> {panel.industrial || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Vigencia:</strong> {panel.vigencia || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Funcionamiento:</strong> {panel.funcionamiento || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Garantía caducada:</strong> {panel.garantia_caducada || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Latitud:</strong> {panel.latitude || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Longitud:</strong> {panel.longitude || 'N/A'}</div>
-          
-          {/* Grupo: Información Adicional CCE y Operadores */}
-          <div className="lg:col-span-1"><strong>Marquesina CCE:</strong> {panel.marquesina_cce || panel.cce || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Op 1:</strong> {panel.op1 || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Op 2:</strong> {panel.op2 || 'N/A'}</div>
-
-          {/* Grupo: Mantenimiento, Vandalismo y Diagnóstico */}
-          <div className="md:col-span-2 lg:col-span-3"><strong>Cambio Ubicación/Reinstalaciones Contrato:</strong> {panel.cambio_ubicacion_reinstalaciones || 'N/A'}</div>
-          <div className="md:col-span-2 lg:col-span-3"><strong>Reinstalación Vandalizados:</strong> {panel.reinstalacion_vandalizados || 'N/A'}</div>
-          <div className="md:col-span-2 lg:col-span-3"><strong>Diagnóstico:</strong> {panel.diagnostico || 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Técnico:</strong> {panel.tecnico || 'N/A'}</div>
-          
-          {/* Grupo: Facturación */}
-          <div className="lg:col-span-1"><strong>Importe Mensual (Original Excel):</strong> {panel.importe_mensual_original !== undefined && panel.importe_mensual_original !== '' ? panel.importe_mensual_original : 'N/A'}</div>
-          <div className="lg:col-span-1"><strong>Importe Mensual (Calculado):</strong> €{panel.importe_mensual?.toFixed(2) || 'N/A'}</div>
-
-
-          {/* Notas Generales y Observaciones */}
-          <div className="md:col-span-2 lg:col-span-3"><strong>Observaciones:</strong> {panel.observaciones || 'N/A'}</div>
-          <div className="md:col-span-2 lg:col-span-3"><strong>Notas Generales (Sistema):</strong> {panel.notes || 'N/A'}</div>
+          {fieldsToDisplay.map((field) => {
+            const rawValue = panel[field.panelKey as keyof Panel]; // Access using panelKey
+            const displayValue = field.isDate 
+              ? formatDateSafe(rawValue as string | null | undefined) 
+              : (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '' ? String(rawValue) : 'N/A');
+            
+            return (
+              <div key={field.label} className="lg:col-span-1">
+                <strong>{field.label}:</strong> {displayValue}
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 
@@ -246,9 +227,6 @@ export default function PanelDetailPage() {
                         <Button variant="ghost" size="icon" onClick={() => handleEventFormOpen(event)} title="Editar Evento">
                           <Edit2 className="h-4 w-4" />
                         </Button>
-                         {/* <Button variant="ghost" size="icon" onClick={() => confirmDeleteEvent(event)} title="Eliminar Evento" className="text-destructive hover:text-destructive">
-                           <Trash2 className="h-4 w-4" />
-                         </Button> */}
                       </TableCell>
                     </TableRow>
                   ))}
