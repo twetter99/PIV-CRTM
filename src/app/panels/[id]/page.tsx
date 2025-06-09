@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import { useData } from '@/contexts/data-provider';
 import PageHeader from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Edit2, PlusCircle, Trash2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -27,22 +27,56 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 
-// Define the specific fields to display with their labels (Excel headers) and corresponding panel object keys
-const fieldsToDisplay: Array<{ label: string; panelKey: keyof Panel | string }> = [
-  { label: 'municipioMarquesina', panelKey: 'municipality' },
-  { label: 'codigoParada', panelKey: 'codigo_parada' },
-  { label: 'codigoMarquesina', panelKey: 'marquesina' }, 
-  { label: 'vigencia', panelKey: 'vigencia' },
-  { label: 'fechaInstalacion', panelKey: 'piv_instalado' },
-  { label: 'fechaDesinstalacion', panelKey: 'piv_desinstalado' },
-  { label: 'fechaReinstalacion', panelKey: 'piv_reinstalado' },
-  { label: 'tipoPiv', panelKey: 'tipo_piv' }, 
-  { label: 'industrial', panelKey: 'industrial' },
-  { label: 'empresaConcesionaria', panelKey: 'client' },
-  { label: 'direccionCce', panelKey: 'address' },
-  { label: 'ultimaInstalacionOReinstalacion', panelKey: 'ultima_instalacion_o_reinstalacion' },
-  { label: 'garantia', panelKey: 'garantia' }, // Added garantia
+// Lista de campos con etiquetas personalizadas. PanelKey debe ser la clave camelCase del objeto panel.
+const explicitFieldsToDisplay: Array<{ label: string; panelKey: string }> = [
+  { label: 'Código Parada', panelKey: 'codigo_parada' }, // Asumiendo que este sigue siendo snake_case en el objeto panel
+  { label: 'Municipio Marquesina', panelKey: 'municipioMarquesina' },
+  { label: 'Código Marquesina', panelKey: 'codigoMarquesina' },
+  { label: 'Vigencia', panelKey: 'vigencia' },
+  { label: 'Fecha Instalación', panelKey: 'fechaInstalacion' },
+  { label: 'Fecha Desinstalación', panelKey: 'fechaDesinstalacion' },
+  { label: 'Fecha Reinstalación', panelKey: 'fechaReinstalacion' },
+  { label: 'Tipo PIV', panelKey: 'tipoPiv' },
+  { label: 'Industrial', panelKey: 'industrial' },
+  { label: 'Empresa Concesionaria', panelKey: 'empresaConcesionaria' },
+  { label: 'Dirección CCE', panelKey: 'direccionCce' },
+  { label: 'Última Instalación/Reinstalación', panelKey: 'ultimaInstalacionOReinstalacion' },
+  { label: 'Opción 1', panelKey: 'op1' },
+  { label: 'Opción 2', panelKey: 'op2' },
+  { label: 'Marquesina CCE', panelKey: 'marquesinaCce' },
+  { label: 'Cambio Ubicación / Reinstalaciones Contrato 2024-2025', panelKey: 'cambioUbicacionReinstalacionesContrato2024_2025' },
+  { label: 'Reinstalación Vandalizados', panelKey: 'reinstalacionVandalizados' },
+  { label: 'Garantía Caducada', panelKey: 'garantiaCaducada' },
+  { label: 'Importe Mensual', panelKey: 'importe_mensual' }, // Asumiendo snake_case
+  { label: 'Observaciones', panelKey: 'observacionesPiv' }, // O la clave que uses para las observaciones generales del PIV
+  { label: 'Notas Internas', panelKey: 'notes' }, // Si 'notes' es para notas internas y diferente de 'observacionesPiv'
 ];
+
+// Función para formatear claves camelCase o snake_case a etiquetas legibles
+function formatKeyToLabel(key: string): string {
+  if (!key) return '';
+  // Convertir snake_case a space case primero
+  let result = key.replace(/_/g, ' ');
+  // Insertar espacio antes de mayúsculas (para camelCase) y luego capitalizar
+  result = result.replace(/([A-Z])/g, ' $1').trim();
+  return result.charAt(0).toUpperCase() + result.slice(1).toLowerCase();
+}
+
+// Claves a excluir del renderizado dinámico si no están en explicitFieldsToDisplay
+// (porque se manejan de otra forma o no son para mostrar directamente aquí)
+const excludedKeysFromDynamicDisplay = new Set([
+  'status', 
+  'lastStatusUpdate', 
+  'latitude', 
+  'longitude',
+  'fecha_importacion',
+  'importado_por',
+  'importe_mensual_original',
+  'installationDate', // A menudo es un alias de piv_instalado o fechaInstalacion
+  // También las claves ya definidas en explicitFieldsToDisplay (se maneja en el bucle)
+  // Claves que podrían ser mapeadas de forma diferente (como client, address) si no usas los camelCase directamente.
+  'piv_instalado', 'piv_desinstalado', 'piv_reinstalado', 'municipality', 'client', 'address',
+]);
 
 
 export default function PanelDetailPage() {
@@ -173,12 +207,15 @@ export default function PanelDetailPage() {
     };
     return statusMap[status as PanelStatus] || status.toString().replace(/_/g, ' ');
   };
+  
+  const panelKeysToDisplay = Object.keys(panel).filter(key => !excludedKeysFromDynamicDisplay.has(key));
+  const explicitPanelKeysInDisplay = new Set(explicitFieldsToDisplay.map(f => f.panelKey));
 
   return (
     <div className="space-y-6">
       <PageHeader 
         title={`Panel: ${panel.codigo_parada || 'N/A'}`}
-        description={panel.address || panel.direccion_cce || panel.municipality || panel.municipio_marquesina || `Información detallada del panel ${panel.codigo_parada || ''}`.trim()}
+        description={panel.direccionCce || panel.address || panel.municipioMarquesina || panel.municipality || `Información detallada del panel ${panel.codigo_parada || ''}`.trim()}
         actions={
           <Button variant="outline" asChild>
             <Link href="/panels"><ArrowLeft className="mr-2 h-4 w-4" />Volver al Listado</Link>
@@ -190,21 +227,35 @@ export default function PanelDetailPage() {
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
             <CardTitle className="font-headline text-2xl">Detalles del Panel</CardTitle>
+             <p className="text-sm text-muted-foreground">Estado actual: <Badge variant={panel.status === 'installed' ? 'default' : (panel.status === 'removed' ? 'destructive' : 'secondary')}>{formatStatusForEventBadge(panel.status)}</Badge> (Últ. act.: {panel.lastStatusUpdate ? formatDateForEventTable(panel.lastStatusUpdate) : 'N/A'})</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => setIsPanelFormOpen(true)}>
             <Edit2 className="mr-2 h-4 w-4" /> Editar Panel
           </Button>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4 text-sm">
-          {fieldsToDisplay.map((field) => {
+          {explicitFieldsToDisplay.map((field) => {
             const rawValue = panel[field.panelKey as keyof Panel];
             const displayValue = (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '') ? String(rawValue) : 'N/A';
             
             return (
-              <div key={field.label} className="lg:col-span-1 break-words">
+              <div key={field.panelKey} className="lg:col-span-1 break-words">
                 <strong>{field.label}:</strong> {displayValue}
               </div>
             );
+          })}
+          {panelKeysToDisplay
+            .filter(key => !explicitPanelKeysInDisplay.has(key)) // Solo mostrar los que no están en la lista explícita
+            .map((key) => {
+              const rawValue = panel[key as keyof Panel];
+              const displayValue = (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '') ? String(rawValue) : 'N/A';
+              const displayLabel = formatKeyToLabel(key);
+
+              return (
+                <div key={key} className="lg:col-span-1 break-words">
+                  <strong>{displayLabel}:</strong> {displayValue}
+                </div>
+              );
           })}
         </CardContent>
       </Card>
@@ -277,3 +328,6 @@ export default function PanelDetailPage() {
     </div>
   );
 }
+
+
+    
