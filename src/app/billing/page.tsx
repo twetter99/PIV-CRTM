@@ -5,14 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useData } from '@/contexts/data-provider';
 import { calculateMonthlyBillingForPanel } from '@/lib/billing-utils';
-import type { BillingRecord, Panel } from '@/types/piv'; // Panel type is no longer directly used here for billingData map
-import { Eye, Download } from 'lucide-react';
+import type { BillingRecord, Panel } from '@/types/piv'; 
+import { Eye, Download, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useMemo, useEffect } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import * as XLSX from 'xlsx';
+import { useToast } from '@/hooks/use-toast';
 
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
@@ -20,14 +21,14 @@ const months = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: new 
 
 export default function BillingPage() {
   const { panels, panelEvents } = useData();
+  const { toast } = useToast();
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
+  const [isExporting, setIsExporting] = useState(false);
 
   const billingData = useMemo(() => {
-    console.log(`[BillingPage] Recalculating billingData for Year: ${selectedYear}, Month: ${selectedMonth}`);
     return panels
       .map(panel => {
-         // calculateMonthlyBillingForPanel ahora usa panel.codigoParada
          return calculateMonthlyBillingForPanel(panel.codigoParada, selectedYear, selectedMonth, panelEvents, panels);
       })
       .filter(record => record.billedDays > 0 || record.panelDetails?.status === 'installed'); 
@@ -41,16 +42,23 @@ export default function BillingPage() {
   const capitalizedMonthLabel = currentMonthLabel ? currentMonthLabel.charAt(0).toUpperCase() + currentMonthLabel.slice(1) : '';
 
   const handleExport = () => {
+    if (billingData.length === 0) {
+      toast({ title: "Sin Datos", description: "No hay datos de facturación para exportar para el período seleccionado."});
+      return;
+    }
+    setIsExporting(true);
+    toast({ title: "Iniciando Exportación...", description: `Preparando datos de facturación para ${capitalizedMonthLabel} ${selectedYear}.`});
+
     try {
       const exportData = billingData.map(record => ({
         'ID Panel': record.panelId,
-        'Cliente': record.panelDetails?.cliente || 'N/A', // Usar panelDetails.cliente
-        'Municipio': record.panelDetails?.municipioMarquesina || 'N/A', // Usar panelDetails.municipioMarquesina
+        'Cliente': record.panelDetails?.cliente || 'N/A', 
+        'Municipio': record.panelDetails?.municipioMarquesina || 'N/A', 
         'Días Facturados (Base 30)': record.billedDays,
         'Importe (€)': record.amount.toFixed(2),
         'Estado': record.panelDetails?.status ? record.panelDetails.status.replace(/_/g, ' ') : 'N/A',
-        'Dirección': record.panelDetails?.direccion || 'N/A', // Usar panelDetails.direccion
-        'Fecha Instalación PIV': record.panelDetails?.fechaInstalacion || 'N/A' // Usar panelDetails.fechaInstalacion
+        'Dirección': record.panelDetails?.direccion || 'N/A', 
+        'Fecha Instalación PIV': record.panelDetails?.fechaInstalacion || 'N/A' 
       }));
 
       exportData.push({
@@ -68,8 +76,8 @@ export default function BillingPage() {
       const wb = XLSX.utils.book_new();
       
       const colWidths = [
-        { wch: 12 }, { wch: 25 }, { wch: 20 }, { wch: 20 },
-        { wch: 12 }, { wch: 20 }, { wch: 30 }, { wch: 15 }
+        { wch: 15 }, { wch: 30 }, { wch: 25 }, { wch: 25 },
+        { wch: 15 }, { wch: 20 }, { wch: 35 }, { wch: 20 }
       ];
       ws['!cols'] = colWidths;
 
@@ -79,11 +87,13 @@ export default function BillingPage() {
       const fileName = `Facturacion_${capitalizedMonthLabel}_${selectedYear}.xlsx`;
       XLSX.writeFile(wb, fileName);
 
-      alert(`Archivo exportado: ${fileName}`);
+      toast({ title: "Exportación Completada", description: `Archivo exportado: ${fileName}`});
       
-    } catch (error) {
-      console.error('Error exportando:', error);
-      alert('Error al exportar el archivo. Revise la consola para más detalles.');
+    } catch (error: any) {
+      console.error('Error exportando facturación:', error);
+      toast({ title: "Error al Exportar", description: `No se pudo generar el archivo de facturación. ${error.message || ''}`, variant: "destructive" });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -94,8 +104,9 @@ export default function BillingPage() {
         title="Facturación Mensual"
         description={`Ver y gestionar la facturación para ${capitalizedMonthLabel} ${selectedYear}.`}
         actions={
-          <Button onClick={handleExport} variant="outline">
-            <Download className="mr-2 h-4 w-4" /> Exportar a Excel
+          <Button onClick={handleExport} variant="outline" disabled={isExporting}>
+            {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            {isExporting ? "Exportando..." : "Exportar a Excel"}
           </Button>
         }
       />
@@ -148,7 +159,6 @@ export default function BillingPage() {
                 <TableCell className="text-right font-semibold">€{record.amount.toFixed(2)}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" asChild>
-                    {/* Enlace a detalles de facturación, panelId ya es codigoParada */}
                     <Link href={`/billing/details?panelId=${record.panelId}&year=${selectedYear}&month=${selectedMonth}`} title="Ver Detalles de Facturación">
                       <Eye className="h-4 w-4" />
                     </Link>
